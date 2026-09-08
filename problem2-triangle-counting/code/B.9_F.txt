@@ -1,0 +1,576 @@
+B.9 代码F：第三问直接优化程序
+Listing 12: 代码F：第三问直接最小化边数的CP-SAT 求解（exact_optimize.py）
+1
+import argparse
+2
+import math
+3
+from itertools import combinations
+4
+from math import comb
+5
+6
+from ortools.sat.python import cp_model
+7
+8
+from bounds import compute_lower_bounds
+
+===== PAGE 61 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+60
+9
+from exact_search import (
+10
+FORCED_EDGES,
+11
+check_graph,
+12
+normalize_edge,
+13
+)
+14
+15
+16
+def optimize_graph(n, k, d, time_limit, workers):
+17
+"""
+18
+Minimize e(G) subject to
+19
+20
+H0 subset of G,
+21
+delta(G) >= d,
+22
+t(G) >= k.
+23
+"""
+24
+model = cp_model.CpModel()
+25
+all_edges = list(combinations(range(n), 2))
+26
+27
+x = {
+28
+edge: model.NewBoolVar(f"x_{edge[0]}_{edge[1]}")
+29
+for edge in all_edges
+30
+}
+31
+32
+for edge in FORCED_EDGES:
+33
+normalized = normalize_edge(*edge)
+34
+35
+if normalized not in x:
+36
+raise ValueError(
+37
+f"forced edge {normalized} is outside the vertex set"
+38
+)
+39
+40
+model.Add(x[normalized] == 1)
+41
+42
+for v in range(n):
+43
+incident_edges = [
+44
+x[normalize_edge(u, v)]
+45
+for u in range(n)
+46
+if u != v
+47
+]
+48
+49
+model.Add(sum(incident_edges) >= d)
+50
+51
+triangle_variables = []
+52
+53
+for a, b, c in combinations(range(n), 3):
+
+===== PAGE 62 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+61
+54
+ab = x[(a, b)]
+55
+ac = x[(a, c)]
+56
+bc = x[(b, c)]
+57
+58
+triangle = model.NewBoolVar(
+59
+f"triangle_{a}_{b}_{c}"
+60
+)
+61
+62
+triangle_variables.append(triangle)
+63
+64
+model.Add(triangle <= ab)
+65
+model.Add(triangle <= ac)
+66
+model.Add(triangle <= bc)
+67
+model.Add(triangle >= ab + ac + bc - 2)
+68
+69
+model.Add(sum(triangle_variables) >= k)
+70
+71
+edge_count = sum(x.values())
+72
+model.Minimize(edge_count)
+73
+74
+solver = cp_model.CpSolver()
+75
+solver.parameters.max_time_in_seconds = time_limit
+76
+solver.parameters.num_search_workers = workers
+77
+78
+status = solver.Solve(model)
+79
+status_name = solver.StatusName(status)
+80
+81
+result = {
+82
+"status": status_name,
+83
+"edges": None,
+84
+"objective": None,
+85
+"solver_lower_bound": None,
+86
+}
+87
+88
+if status in (
+89
+cp_model.OPTIMAL,
+90
+cp_model.FEASIBLE,
+91
+):
+92
+edges = [
+93
+edge
+94
+for edge in all_edges
+95
+if solver.Value(x[edge]) == 1
+96
+]
+97
+98
+result["edges"] = edges
+
+===== PAGE 63 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+62
+99
+result["objective"] = int(
+100
+round(solver.ObjectiveValue())
+101
+)
+102
+103
+result["solver_lower_bound"] = math.ceil(
+104
+solver.BestObjectiveBound() - 1e-9
+105
+)
+106
+107
+return result
+108
+109
+110
+def parse_arguments():
+111
+parser = argparse.ArgumentParser(
+112
+description=(
+113
+"Directly minimize the number of edges in a legal graph."
+114
+)
+115
+)
+116
+117
+parser.add_argument("--n", type=int, default=9)
+118
+parser.add_argument("--k", type=int, default=11)
+119
+parser.add_argument("--d", type=int, default=3)
+120
+121
+parser.add_argument(
+122
+"--time-limit",
+123
+type=float,
+124
+default=300.0,
+125
+help="Total solver time limit in seconds.",
+126
+)
+127
+128
+parser.add_argument(
+129
+"--workers",
+130
+type=int,
+131
+default=8,
+132
+help="Number of CP-SAT search workers.",
+133
+)
+134
+135
+return parser.parse_args()
+136
+137
+138
+def validate_arguments(args):
+139
+if args.n < 9:
+140
+raise ValueError("n must satisfy n >= 9")
+141
+142
+if not (0 <= args.d <= args.n - 1):
+143
+raise ValueError("d must satisfy 0 <= d <= n - 1")
+
+===== PAGE 64 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+63
+144
+145
+if not (0 <= args.k <= comb(args.n, 3)):
+146
+raise ValueError("k must satisfy 0 <= k <= C(n,3)")
+147
+148
+if args.time_limit <= 0:
+149
+raise ValueError("time-limit must be positive")
+150
+151
+if args.workers <= 0:
+152
+raise ValueError("workers must be positive")
+153
+154
+155
+def main():
+156
+args = parse_arguments()
+157
+validate_arguments(args)
+158
+159
+theoretical_bounds = compute_lower_bounds(
+160
+args.n,
+161
+args.k,
+162
+args.d,
+163
+)
+164
+165
+theoretical_lower_bound = theoretical_bounds["combined"]
+166
+167
+print("Parameters")
+168
+print(f"n = {args.n}")
+169
+print(f"k = {args.k}")
+170
+print(f"d = {args.d}")
+171
+print(
+172
+"Theoretical lower bound = "
+173
+f"{theoretical_lower_bound}"
+174
+)
+175
+print(f"Time limit = {args.time_limit} seconds")
+176
+print(f"Workers = {args.workers}")
+177
+print()
+178
+179
+result = optimize_graph(
+180
+n=args.n,
+181
+k=args.k,
+182
+d=args.d,
+183
+time_limit=args.time_limit,
+184
+workers=args.workers,
+185
+)
+186
+187
+status = result["status"]
+188
+
+===== PAGE 65 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+64
+189
+print("Solver status:", status)
+190
+191
+if status == "INFEASIBLE":
+192
+print(
+193
+"The model was declared infeasible. In the stated "
+194
+"parameter range, K_n should be feasible, so inputs "
+195
+"and the model should be checked."
+196
+)
+197
+return
+198
+199
+if status not in ("OPTIMAL", "FEASIBLE"):
+200
+print(
+201
+"The solver produced no witness. "
+202
+"No new upper bound is available."
+203
+)
+204
+return
+205
+206
+edges = result["edges"]
+207
+objective = result["objective"]
+208
+solver_lower_bound = result["solver_lower_bound"]
+209
+210
+print("Solver objective:", objective)
+211
+print("Solver lower bound:", solver_lower_bound)
+212
+print("Edges:")
+213
+print(sorted(edges))
+214
+print()
+215
+216
+verified = check_graph(
+217
+n=args.n,
+218
+edges=edges,
+219
+k=args.k,
+220
+d=args.d,
+221
+verbose=True,
+222
+)
+223
+224
+if not verified:
+225
+print(
+226
+"The candidate failed independent verification. "
+227
+"Do not use it as an upper bound."
+228
+)
+229
+return
+230
+231
+actual_edge_count = len(edges)
+232
+233
+combined_lower_bound = max(
+
+===== PAGE 66 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+65
+234
+theoretical_lower_bound,
+235
+solver_lower_bound,
+236
+)
+237
+238
+print()
+239
+print(
+240
+f"Verified upper bound: "
+241
+f"E({args.n},{args.k},{args.d}) <= "
+242
+f"{actual_edge_count}"
+243
+)
+244
+245
+print(
+246
+f"Current lower bound: "
+247
+f"E({args.n},{args.k},{args.d}) >= "
+248
+f"{combined_lower_bound}"
+249
+)
+250
+251
+if status == "OPTIMAL":
+252
+print()
+253
+print(
+254
+"CP-SAT completed the optimization and returned OPTIMAL."
+255
+)
+256
+print(
+257
+f"Computational result: "
+258
+f"E({args.n},{args.k},{args.d}) "
+259
+f"= {actual_edge_count}"
+260
+)
+261
+262
+if actual_edge_count == theoretical_lower_bound:
+263
+print(
+264
+"The witness attains the pure theoretical lower "
+265
+"bound. Hence the equality follows from the "
+266
+"theoretical bound and the verified witness."
+267
+)
+268
+else:
+269
+print(
+270
+"The lower-bound step beyond the theoretical bound "
+271
+"depends on CP-SAT's completed optimality proof."
+272
+)
+273
+274
+elif combined_lower_bound == actual_edge_count:
+275
+print()
+276
+print(
+277
+"The solver lower bound and verified upper bound coincide."
+278
+)
+
+===== PAGE 67 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+66
+279
+print(
+280
+f"Computationally, "
+281
+f"E({args.n},{args.k},{args.d}) "
+282
+f"= {actual_edge_count}"
+283
+)
+284
+285
+else:
+286
+print()
+287
+print("Current interval:")
+288
+print(
+289
+f"{combined_lower_bound} <= "
+290
+f"E({args.n},{args.k},{args.d}) <= "
+291
+f"{actual_edge_count}"
+292
+)
+293
+print(
+294
+"The optimization stopped before proving optimality. "
+295
+"Increasing the time limit may tighten the interval."
+296
+)
+297
+298
+299
+if __name__ == "__main__":
+300
+main()

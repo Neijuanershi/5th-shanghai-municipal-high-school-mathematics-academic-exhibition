@@ -1,0 +1,15 @@
+name = "Q2Formal"
+version = "0.1.0"
+defaultTargets = ["Q2Formal"]
+
+[leanOptions]
+pp.unicode.fun = true # pretty-prints `fun a ↦ b`
+relaxedAutoImplicit = false
+maxSynthPendingDepth = 3
+
+[[require]]
+name = "mathlib"
+path = ".lake/packages/mathlib"
+
+[[lean_lib]]
+name = "Q2Formal"

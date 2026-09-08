@@ -1,0 +1,713 @@
+B.8 代码E：第三问逐层搜索程序
+Listing 11: 代码E：第三问按累计边数上限的见证图搜索（exact_search.py）
+1
+import argparse
+2
+from itertools import combinations
+3
+from math import comb
+4
+5
+from ortools.sat.python import cp_model
+6
+7
+from bounds import compute_lower_bounds
+8
+9
+10
+FORCED_EDGES = {
+11
+(0, 1),
+12
+(0, 2),
+13
+(0, 3),
+14
+(0, 4),
+15
+(5, 6),
+16
+(7, 8),
+17
+}
+18
+19
+20
+def normalize_edge(u, v):
+21
+if u == v:
+22
+raise ValueError("loops are not allowed")
+23
+24
+return (u, v) if u < v else (v, u)
+25
+26
+27
+def check_graph(n, edges, k, d, verbose=True):
+28
+"""
+29
+Independently verify a candidate graph.
+30
+31
+Checks endpoints, loops, duplicate edges, forced edges,
+32
+minimum degree, and the number of triangles.
+
+===== PAGE 53 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+52
+33
+"""
+34
+edge_set = set()
+35
+36
+for u, v in edges:
+37
+if not (0 <= u < n and 0 <= v < n):
+38
+if verbose:
+39
+print("Invalid endpoint:", (u, v))
+40
+return False
+41
+42
+if u == v:
+43
+if verbose:
+44
+print("Loop found:", (u, v))
+45
+return False
+46
+47
+normalized = normalize_edge(u, v)
+48
+49
+if normalized in edge_set:
+50
+if verbose:
+51
+print("Duplicate edge:", (u, v))
+52
+return False
+53
+54
+edge_set.add(normalized)
+55
+56
+missing_forced = FORCED_EDGES - edge_set
+57
+58
+degrees = [0] * n
+59
+60
+for u, v in edge_set:
+61
+degrees[u] += 1
+62
+degrees[v] += 1
+63
+64
+minimum_degree = min(degrees)
+65
+66
+triangle_count = 0
+67
+68
+for a, b, c in combinations(range(n), 3):
+69
+if (
+70
+(a, b) in edge_set
+71
+and (a, c) in edge_set
+72
+and (b, c) in edge_set
+73
+):
+74
+triangle_count += 1
+75
+76
+valid = (
+77
+not missing_forced
+
+===== PAGE 54 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+53
+78
+and minimum_degree >= d
+79
+and triangle_count >= k
+80
+)
+81
+82
+if verbose:
+83
+print("Actual edge count:", len(edge_set))
+84
+print("Degrees:", degrees)
+85
+print("Minimum degree:", minimum_degree)
+86
+print("Triangle count:", triangle_count)
+87
+print("Missing forced edges:", sorted(missing_forced))
+88
+print("Minimum-degree condition:", minimum_degree >= d)
+89
+print("Triangle condition:", triangle_count >= k)
+90
+print("Verified:", valid)
+91
+92
+return valid
+93
+94
+95
+def search_at_most(n, k, d, max_edges, time_limit):
+96
+"""
+97
+Search for a graph satisfying
+98
+99
+H0 subset of G,
+100
+delta(G) >= d,
+101
+t(G) >= k,
+102
+e(G) <= max_edges.
+103
+"""
+104
+model = cp_model.CpModel()
+105
+all_edges = list(combinations(range(n), 2))
+106
+107
+x = {
+108
+edge: model.NewBoolVar(f"x_{edge[0]}_{edge[1]}")
+109
+for edge in all_edges
+110
+}
+111
+112
+for edge in FORCED_EDGES:
+113
+normalized = normalize_edge(*edge)
+114
+115
+if normalized not in x:
+116
+raise ValueError(
+117
+f"forced edge {normalized} is outside the vertex set"
+118
+)
+119
+120
+model.Add(x[normalized] == 1)
+121
+122
+model.Add(sum(x.values()) <= max_edges)
+
+===== PAGE 55 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+54
+123
+124
+for v in range(n):
+125
+incident_edges = [
+126
+x[normalize_edge(u, v)]
+127
+for u in range(n)
+128
+if u != v
+129
+]
+130
+131
+model.Add(sum(incident_edges) >= d)
+132
+133
+triangle_variables = []
+134
+135
+for a, b, c in combinations(range(n), 3):
+136
+ab = x[(a, b)]
+137
+ac = x[(a, c)]
+138
+bc = x[(b, c)]
+139
+140
+triangle = model.NewBoolVar(
+141
+f"triangle_{a}_{b}_{c}"
+142
+)
+143
+144
+triangle_variables.append(triangle)
+145
+146
+model.Add(triangle <= ab)
+147
+model.Add(triangle <= ac)
+148
+model.Add(triangle <= bc)
+149
+model.Add(triangle >= ab + ac + bc - 2)
+150
+151
+model.Add(sum(triangle_variables) >= k)
+152
+153
+solver = cp_model.CpSolver()
+154
+solver.parameters.max_time_in_seconds = time_limit
+155
+solver.parameters.num_search_workers = 8
+156
+157
+status = solver.Solve(model)
+158
+status_name = solver.StatusName(status)
+159
+160
+if status not in (
+161
+cp_model.OPTIMAL,
+162
+cp_model.FEASIBLE,
+163
+):
+164
+return status_name, None
+165
+166
+edge_list = [
+167
+edge
+
+===== PAGE 56 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+55
+168
+for edge in all_edges
+169
+if solver.Value(x[edge]) == 1
+170
+]
+171
+172
+return status_name, edge_list
+173
+174
+175
+def search_from_bound(n, k, d, start_bound, time_limit):
+176
+"""
+177
+Search cumulative edge bounds beginning at start_bound.
+178
+179
+INFEASIBLE at m excludes all legal graphs with e(G) <= m.
+180
+UNKNOWN or any unhandled status stops the search.
+181
+"""
+182
+for m in range(start_bound, comb(n, 2) + 1):
+183
+print()
+184
+print("-" * 64)
+185
+print(f"Searching for a graph with e(G) <= {m}")
+186
+187
+status_name, edge_list = search_at_most(
+188
+n=n,
+189
+k=k,
+190
+d=d,
+191
+max_edges=m,
+192
+time_limit=time_limit,
+193
+)
+194
+195
+print("Solver status:", status_name)
+196
+197
+if status_name in ("OPTIMAL", "FEASIBLE"):
+198
+print("A candidate witness was found.")
+199
+return status_name, m, edge_list
+200
+201
+if status_name == "INFEASIBLE":
+202
+print(
+203
+f"No graph with e(G) <= {m} exists in this model."
+204
+)
+205
+continue
+206
+207
+if status_name == "UNKNOWN":
+208
+print(
+209
+"The search did not finish. No feasibility or "
+210
+"infeasibility conclusion can be made."
+211
+)
+212
+else:
+
+===== PAGE 57 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+56
+213
+print(f"Unhandled solver status: {status_name}")
+214
+215
+return status_name, m, None
+216
+217
+return "NOT_FOUND", None, None
+218
+219
+220
+def parse_arguments():
+221
+parser = argparse.ArgumentParser(
+222
+description=(
+223
+"Search for a legal graph under cumulative edge bounds."
+224
+)
+225
+)
+226
+227
+parser.add_argument("--n", type=int, default=9)
+228
+parser.add_argument("--k", type=int, default=11)
+229
+parser.add_argument("--d", type=int, default=3)
+230
+231
+parser.add_argument(
+232
+"--lower-bound",
+233
+type=int,
+234
+default=None,
+235
+help=(
+236
+"Initial cumulative edge bound. If omitted, the combined "
+237
+"theoretical lower bound is used."
+238
+),
+239
+)
+240
+241
+parser.add_argument(
+242
+"--time-limit",
+243
+type=float,
+244
+default=60.0,
+245
+help="Time limit in seconds for each cumulative bound.",
+246
+)
+247
+248
+return parser.parse_args()
+249
+250
+251
+def validate_arguments(args):
+252
+if args.n < 9:
+253
+raise ValueError("n must satisfy n >= 9")
+254
+255
+if not (0 <= args.d <= args.n - 1):
+256
+raise ValueError("d must satisfy 0 <= d <= n - 1")
+257
+
+===== PAGE 58 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+57
+258
+if not (0 <= args.k <= comb(args.n, 3)):
+259
+raise ValueError("k must satisfy 0 <= k <= C(n,3)")
+260
+261
+if args.time_limit <= 0:
+262
+raise ValueError("time-limit must be positive")
+263
+264
+if args.lower_bound is not None:
+265
+if not (0 <= args.lower_bound <= comb(args.n, 2)):
+266
+raise ValueError(
+267
+"lower-bound must satisfy "
+268
+"0 <= lower-bound <= C(n,2)"
+269
+)
+270
+271
+272
+def main():
+273
+args = parse_arguments()
+274
+validate_arguments(args)
+275
+276
+bounds = compute_lower_bounds(
+277
+args.n,
+278
+args.k,
+279
+args.d,
+280
+)
+281
+282
+theoretical_lower_bound = bounds["combined"]
+283
+284
+if args.lower_bound is None:
+285
+search_start = theoretical_lower_bound
+286
+else:
+287
+search_start = args.lower_bound
+288
+289
+print("Parameters")
+290
+print(f"n = {args.n}")
+291
+print(f"k = {args.k}")
+292
+print(f"d = {args.d}")
+293
+print(
+294
+"Combined theoretical lower bound = "
+295
+f"{theoretical_lower_bound}"
+296
+)
+297
+print(f"Search starts at = {search_start}")
+298
+print(
+299
+"Time limit per cumulative bound = "
+300
+f"{args.time_limit} seconds"
+301
+)
+302
+
+===== PAGE 59 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+58
+303
+if search_start < theoretical_lower_bound:
+304
+print()
+305
+print(
+306
+"Warning: the selected start is below the known "
+307
+"theoretical lower bound."
+308
+)
+309
+310
+if search_start > theoretical_lower_bound:
+311
+print()
+312
+print(
+313
+"Warning: cumulative bounds between the theoretical "
+314
+"lower bound and the selected start will be skipped."
+315
+)
+316
+317
+status_name, tested_bound, edge_list = search_from_bound(
+318
+n=args.n,
+319
+k=args.k,
+320
+d=args.d,
+321
+start_bound=search_start,
+322
+time_limit=args.time_limit,
+323
+)
+324
+325
+print()
+326
+print("=" * 64)
+327
+print("Final solver status:", status_name)
+328
+329
+if edge_list is None:
+330
+print("No independently verifiable witness was produced.")
+331
+return
+332
+333
+actual_edge_count = len(edge_list)
+334
+335
+print("Tested cumulative bound:", tested_bound)
+336
+print("Actual edge count:", actual_edge_count)
+337
+print("Edges:")
+338
+print(sorted(edge_list))
+339
+340
+print()
+341
+print("Independent verification")
+342
+343
+verified = check_graph(
+344
+n=args.n,
+345
+edges=edge_list,
+346
+k=args.k,
+347
+d=args.d,
+
+===== PAGE 60 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+59
+348
+verbose=True,
+349
+)
+350
+351
+if not verified:
+352
+print(
+353
+"The candidate failed independent verification. "
+354
+"Do not use it as an upper bound."
+355
+)
+356
+return
+357
+358
+print()
+359
+print(
+360
+f"Verified upper bound: "
+361
+f"E({args.n},{args.k},{args.d}) <= "
+362
+f"{actual_edge_count}"
+363
+)
+364
+365
+if actual_edge_count == theoretical_lower_bound:
+366
+print(
+367
+f"E({args.n},{args.k},{args.d}) "
+368
+f"= {actual_edge_count}"
+369
+)
+370
+else:
+371
+print(
+372
+f"{theoretical_lower_bound} <= "
+373
+f"E({args.n},{args.k},{args.d}) <= "
+374
+f"{actual_edge_count}"
+375
+)
+376
+377
+378
+if __name__ == "__main__":
+379
+main()

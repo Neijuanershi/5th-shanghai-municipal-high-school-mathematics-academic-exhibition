@@ -1,0 +1,444 @@
+B.7 代码D：第三问下界计算程序
+Listing 10: 代码D：第三问六项理论下界与LDT 的计算（bounds.py）
+1
+from math import comb
+2
+3
+4
+def ceil_div(a, b):
+5
+"""Return ceil(a / b), assuming b > 0."""
+6
+if b <= 0:
+7
+raise ValueError("b must be positive")
+8
+return -((-a) // b)
+9
+10
+11
+def validate_parameters(n, k, d):
+12
+if n < 9:
+
+===== PAGE 47 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+46
+13
+raise ValueError("n must satisfy n >= 9")
+14
+if not (0 <= d <= n - 1):
+15
+raise ValueError("d must satisfy 0 <= d <= n - 1")
+16
+if not (0 <= k <= comb(n, 3)):
+17
+raise ValueError("k must satisfy 0 <= k <= C(n, 3)")
+18
+19
+20
+def degree_lower_bounds(n, d):
+21
+"""
+22
+Return degree lower bounds imposed by delta(G) >= d and H0.
+23
+24
+Forced edges:
+25
+01, 02, 03, 04, 56, 78.
+26
+27
+The bounds are sorted in descending order because compute_U
+28
+fills coordinates with larger initial lower bounds first.
+29
+"""
+30
+if n < 9:
+31
+raise ValueError("n must satisfy n >= 9")
+32
+if not (0 <= d <= n - 1):
+33
+raise ValueError("d must satisfy 0 <= d <= n - 1")
+34
+35
+ell = [max(d, 4)]
+36
+ell.extend([max(d, 1)] * 8)
+37
+ell.extend([d] * (n - 9))
+38
+39
+return sorted(ell, reverse=True)
+40
+41
+42
+def handshake_bound(n, d):
+43
+return ceil_div(n * d, 2)
+44
+45
+46
+def forced_degree_gap_bound(n, d):
+47
+gap = (
+48
+max(d - 4, 0)
+49
++ 8 * max(d - 1, 0)
+50
++ (n - 9) * d
+51
+)
+52
+return 6 + ceil_div(gap, 2)
+53
+54
+55
+def triangle_edge_bound(n, k):
+56
+return ceil_div(3 * k, n - 2)
+57
+
+===== PAGE 48 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+47
+58
+59
+def triangle_nonforced_edge_bound(n, k):
+60
+return 6 + ceil_div(k, n - 2)
+61
+62
+63
+def kk_triangle_max_for_edges(m):
+64
+"""
+65
+Kruskal-Katona upper bound for the number of triangles.
+66
+67
+Write m = C(a,2) + b with 0 <= b < a.
+68
+The maximum number of triangles is C(a,3) + C(b,2).
+69
+"""
+70
+if m < 0:
+71
+raise ValueError("m must be nonnegative")
+72
+73
+a = 1
+74
+75
+while comb(a + 1, 2) <= m:
+76
+a += 1
+77
+78
+b = m - comb(a, 2)
+79
+80
+if not (0 <= b < a):
+81
+raise RuntimeError("invalid Kruskal-Katona decomposition")
+82
+83
+return comb(a, 3) + comb(b, 2)
+84
+85
+86
+def compute_L_KK(n, k):
+87
+"""
+88
+Compute the KK lower bound subject to m <= C(n,2).
+89
+90
+Abstractly, the KK lower bound depends on k. The parameter n is
+91
+used here to enforce the edge limit of an n-vertex graph.
+92
+"""
+93
+if n < 1:
+94
+raise ValueError("n must be positive")
+95
+if k < 0:
+96
+raise ValueError("k must be nonnegative")
+97
+98
+for m in range(comb(n, 2) + 1):
+99
+if kk_triangle_max_for_edges(m) >= k:
+100
+return m
+101
+102
+return float("inf")
+
+===== PAGE 49 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+48
+103
+104
+105
+def compute_U(n, d, m, return_vector=False):
+106
+"""
+107
+Compute the relaxed maximum
+108
+109
+U(n,d,m) = max sum_i C(x_i,2),
+110
+111
+subject to
+112
+113
+ell_i <= x_i <= n-1,
+114
+sum_i x_i = 2m.
+115
+116
+The maximizing vector need not be graphical.
+117
+"""
+118
+if n < 9:
+119
+raise ValueError("n must satisfy n >= 9")
+120
+if not (0 <= d <= n - 1):
+121
+raise ValueError("d must satisfy 0 <= d <= n - 1")
+122
+if not (0 <= m <= comb(n, 2)):
+123
+return None
+124
+125
+ell = degree_lower_bounds(n, d)
+126
+total_degree = 2 * m
+127
+lower_sum = sum(ell)
+128
+129
+if total_degree < lower_sum:
+130
+return None
+131
+132
+if total_degree > n * (n - 1):
+133
+return None
+134
+135
+x = ell[:]
+136
+remaining = total_degree - lower_sum
+137
+138
+# ell is descending, so larger lower bounds are filled first.
+139
+for i in range(n):
+140
+capacity = n - 1 - x[i]
+141
+added = min(remaining, capacity)
+142
+143
+x[i] += added
+144
+remaining -= added
+145
+146
+if remaining == 0:
+147
+break
+
+===== PAGE 50 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+49
+148
+149
+if remaining != 0:
+150
+return None
+151
+152
+value = sum(comb(x_i, 2) for x_i in x)
+153
+154
+if return_vector:
+155
+return value, x
+156
+157
+return value
+158
+159
+160
+def compute_L_DT(n, k, d):
+161
+"""
+162
+Compute
+163
+164
+L_DT(n,k,d) = min {m : U(n,d,m) >= 3k}.
+165
+"""
+166
+validate_parameters(n, k, d)
+167
+168
+ell = degree_lower_bounds(n, d)
+169
+170
+first_m = max(
+171
+6,
+172
+ceil_div(sum(ell), 2),
+173
+)
+174
+175
+for m in range(first_m, comb(n, 2) + 1):
+176
+value = compute_U(n, d, m)
+177
+178
+if value is not None and value >= 3 * k:
+179
+return m
+180
+181
+return float("inf")
+182
+183
+184
+def compute_lower_bounds(n, k, d):
+185
+"""
+186
+Compute the six theoretical lower bounds and their maximum.
+187
+"""
+188
+validate_parameters(n, k, d)
+189
+190
+bounds = {
+191
+"handshake":
+192
+handshake_bound(n, d),
+
+===== PAGE 51 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+50
+193
+194
+"forced_degree_gap":
+195
+forced_degree_gap_bound(n, d),
+196
+197
+"triangle_edge":
+198
+triangle_edge_bound(n, k),
+199
+200
+"triangle_nonforced_edge":
+201
+triangle_nonforced_edge_bound(n, k),
+202
+203
+"Kruskal_Katona":
+204
+compute_L_KK(n, k),
+205
+206
+"degree_triangle":
+207
+compute_L_DT(n, k, d),
+208
+}
+209
+210
+bounds["combined"] = max(bounds.values())
+211
+212
+return bounds
+213
+214
+215
+def print_bounds(n, k, d):
+216
+print("=" * 64)
+217
+print(f"n={n}, k={k}, d={d}")
+218
+219
+bounds = compute_lower_bounds(n, k, d)
+220
+221
+for name, value in bounds.items():
+222
+print(f"{name:28s}: {value}")
+223
+224
+225
+def demo():
+226
+print_bounds(9, 11, 3)
+227
+228
+print()
+229
+230
+for m in (14, 15):
+231
+result = compute_U(
+232
+9,
+233
+3,
+234
+m,
+235
+return_vector=True,
+236
+)
+237
+
+===== PAGE 52 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+51
+238
+value, vector = result
+239
+240
+print(f"U(9,3,{m}) = {value}")
+241
+print(f"relaxed vector = {vector}")
+242
+243
+244
+if __name__ == "__main__":
+245
+demo()

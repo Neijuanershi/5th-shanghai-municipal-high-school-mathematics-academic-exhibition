@@ -1,0 +1,107 @@
+﻿Lean 4 v4.5 verification log (regenerated after closed-prefix revision)
+Date: 2026-08-19 22:20:49
+
+===== evidence script (_q2_evidence.lean) via lake env lean =====
+N_lower_bound (n : ℕ) (hn : 2 ≤ n) (p : Plan) : Valid n p → (∃ t, Escaped p n t) → p.cards ≥ 4 * n + 1
+theorem N_lower_bound : ∀ (n : ℕ), 2 ≤ n → ∀ (p : Plan), Valid n p → (∃ t, Escaped p n t) → p.cards ≥ 4 * n + 1 :=
+fun n hn p hv hesc =>
+  Exists.casesOn (firstEscape_chain p hn hesc) fun ts h =>
+    And.casesOn h fun hlen right =>
+      And.casesOn right fun hFE hord =>
+        let m := n - 2;
+        have hm_len := id (Decidable.byContradiction fun a => N_lower_bound._proof_1_1 n hn ts hlen a);
+        have hFE0 := fun j hj0 hj hj' =>
+          have hFEj :=
+            hFE (j + 2) (Decidable.byContradiction fun a => N_lower_bound._proof_1_2 n ts j hj0 a)
+              (Decidable.byContradiction fun a => N_lower_bound._proof_1_3 n hn ts j hj a)
+              (Decidable.byContradiction fun a => N_lower_bound._proof_1_4 n ts hlen hm_len j hj0 hj a);
+          Eq.mp
+            (congrArg (FirstEscape p (j + 2))
+              (GetElem.getElem.congr_simp ts ts (Eq.refl ts) (j + 2 - 2) j
+                (have this := Decidable.byContradiction fun a => N_lower_bound._proof_1_5 n ts j hj0 a;
+                this)
+                (Decidable.byContradiction fun a => N_lower_bound._proof_1_4 n ts hlen hm_len j hj0 hj a)))
+            hFEj;
+        have hord0 := fun k hk0 hk hkA hkB =>
+          have hordk :=
+            hord (k + 2) (Decidable.byContradiction fun a => N_lower_bound._proof_1_2 n ts k hk0 a)
+              (Decidable.byContradiction fun a => N_lower_bound._proof_1_6 n hn ts k hk a)
+              (Decidable.byContradiction fun a => N_lower_bound._proof_1_7 n ts hlen hm_len k hk0 hk a)
+              (Decidable.byContradiction fun a => N_lower_bound._proof_1_8 n ts hlen hm_len k hk0 hk a);
+          Eq.mp
+            (congr
+              (congrArg LT.lt
+                (GetElem.getElem.congr_simp ts ts (Eq.refl ts) (k + 2 - 2) k
+                  (have this := Decidable.byContradiction fun a => N_lower_bound._proof_1_5 n ts k hk0 a;
+                  this)
+                  (Decidable.byContradiction fun a => N_lower_bound._proof_1_7 n ts hlen hm_len k hk0 hk a)))
+              (GetElem.getElem.congr_simp ts ts (Eq.refl ts) (k + 2 - 1) (k + 1)
+                (have this := Decidable.byContradiction fun a => N_lower_bound._proof_1_9 n ts k hk0 a;
+                this)
+                (Decidable.byContradiction fun a => N_lower_bound._proof_1_8 n ts hlen hm_len k hk0 hk a)))
+            hordk;
+        have hbase :=
+          base_nine p ts[0]
+            (valid_mono
+              (have this := hn;
+              this)
+              hv)
+            (hFE0 0 (Decidable.byContradiction fun a => N_lower_bound._proof_1_11 n ts a)
+              (Decidable.byContradiction fun a => N_lower_bound._proof_1_12 n ts a)
+              (Decidable.byContradiction fun a => N_lower_bound._proof_1_10 n ts hlen hm_len a));
+        have hlayers :=
+          ccChain_ge_four p n 2 hv m ts hm_len hFE0
+            (Decidable.byContradiction fun a => N_lower_bound._proof_1_13 n p ts hlen hm_len a)
+            (Decidable.byContradiction fun a => N_lower_bound._proof_1_14 n hn p ts hlen hm_len a);
+        have htel :=
+          ccChain_telescope p m ts hm_len hord0
+            (Decidable.byContradiction fun a => N_lower_bound._proof_1_15 n p ts hlen hm_len a)
+            (Decidable.byContradiction fun a => N_lower_bound._proof_1_16 n p ts hlen hm_len a);
+        have htotal :=
+          Eq.mpr (id (congrArg (fun _a => CrossCardsLe p 0 ts[0] + _a ≤ p.cards) htel))
+            (crossCardsLe_oc_pair_le p ts[0] ts[m]);
+        have hsum := le_trans (add_le_add hbase hlayers) htotal;
+        Decidable.byContradiction fun a => N_lower_bound._proof_1_17 n hn p ts hlen hm_len hsum a
+'N_lower_bound' depends on axioms: [base_nine,
+ escape_nested,
+ first_exists,
+ first_order,
+ layer_four,
+ propext,
+ Classical.choice,
+ Quot.sound]
+EVID_EXIT=0
+===== lake build full log =====
+⚠ [8667/8670] Replayed Q2Formal.Counting
+warning: Q2Formal/Counting.lean:86:20: This simp argument is unused:
+  h2
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [h1, h3] at ih ⊢
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Q2Formal/Counting.lean:90:16: This simp argument is unused:
+  h1
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [h2, h3] at ih ⊢
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Q2Formal/Counting.lean:145:20: This simp argument is unused:
+  h2
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [h1, h3] at ih ⊢
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+warning: Q2Formal/Counting.lean:149:16: This simp argument is unused:
+  h1
+
+Hint: Omit it from the simp argument list.
+  [apply] simp [h2, h3] at ih ⊢
+
+Note: This linter can be disabled with `set_option linter.unusedSimpArgs false`
+⚠ [8668/8670] Built Q2Formal.Main (73s)
+warning: Q2Formal/Main.lean:119:2: Try this: intro st hst h
+✔ [8669/8670] Built Q2Formal (53s)
+Build completed successfully (8670 jobs).

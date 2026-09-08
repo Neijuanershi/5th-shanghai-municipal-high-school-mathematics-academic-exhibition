@@ -1,0 +1,516 @@
+B.1 代码A：n = 9 完备枚举（完整）
+Listing 4: 代码A：n = 9 完备枚举程序（Numba 加速，8 进程）
+1
+#!/usr/bin/env python3
+2
+"""
+3
+第一问n=9 完备枚举程序（修正版）
+4
+输出E(9,k) (k=1..84)
+5
+使用Numba 加速，8进程并行
+6
+"""
+7
+8
+import numpy as np
+9
+from math import comb
+10
+import time, multiprocessing as mp, json, os
+11
+12
+try:
+13
+from numba import njit
+14
+HAS_NUMBA = True
+15
+except ImportError:
+16
+HAS_NUMBA = False
+17
+print("Numba 未安装，将使用纯Python 回退（较慢）")
+18
+def njit(func):
+19
+return func
+20
+21
+# 强制子图H0
+22
+H0 = [(0,1),(0,2),(0,3),(0,4),(5,6),(7,8)]
+23
+N = 9
+24
+EDGES = [(i,j) for i in range(N) for j in range(i+1,N)]
+25
+EDGE_IDX = {e:idx for idx,e in enumerate(EDGES)}
+26
+M = len(EDGES)
+# 36
+27
+H0_IDX = frozenset(EDGE_IDX[e] for e in H0)
+28
+H0_MASK = sum(1<<e for e in H0_IDX)
+29
+N_H0 = 6
+30
+31
+# 预计算三角形的三个边编号及其位掩码
+32
+TRI_EDGES = []
+33
+TRI_MASKS = []
+34
+for a in range(N):
+35
+for b in range(a+1,N):
+36
+for c in range(b+1,N):
+
+===== PAGE 30 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+29
+37
+e1 = EDGE_IDX[(a,b)]; e2 = EDGE_IDX[(a,c)]; e3 = EDGE_IDX[(b,c)]
+38
+TRI_EDGES.append((e1, e2, e3))
+39
+TRI_MASKS.append((1<<e1)|(1<<e2)|(1<<e3))
+40
+41
+VARIABLE_INDICES = [i for i in range(M) if i not in H0_IDX]
+# 30 条可选边
+42
+43
+def count_triangles(mask):
+44
+return sum(1 for tm in TRI_MASKS if (mask & tm) == tm)
+45
+46
+# Numba 核心搜索
+47
+@njit
+48
+def numba_dfs(start_pos, selected, cur_mask, cur_tri, tri_state,
+49
+rem_indices, need, k, tri_ptr, tri_data):
+50
+if cur_tri >= k:
+51
+return True, cur_mask, cur_tri
+52
+if selected == need:
+53
+return False, 0, 0
+54
+for i in range(start_pos, len(rem_indices)):
+55
+e = rem_indices[i]
+56
+new_mask = cur_mask | (1<<e)
+57
+new_tri = cur_tri
+58
+new_state = tri_state.copy()
+59
+s, eend = tri_ptr[e], tri_ptr[e+1]
+60
+for idx in range(s, eend):
+61
+tid = tri_data[idx]
+62
+new_state[tid] += 1
+63
+if new_state[tid] == 3:
+64
+new_tri += 1
+65
+found, fm, ft = numba_dfs(i+1, selected+1, new_mask, new_tri,
+66
+new_state, rem_indices, need, k,
+67
+tri_ptr, tri_data)
+68
+if found:
+69
+return True, fm, ft
+70
+return False, 0, 0
+71
+72
+def search_worker(args):
+73
+prefix, rem, need, k, graph = args
+74
+if not isinstance(rem, np.ndarray):
+75
+rem = np.array(rem, dtype=np.int64)
+76
+mask = graph['H0_MASK']
+77
+tri_state = np.zeros(graph['TRI_COUNT'], dtype=np.int64)
+78
+cur_tri = 0
+79
+for e in range(graph['M']):
+80
+if (mask>>e) & 1:
+81
+for idx in range(graph['TRI_PTR'][e], graph['TRI_PTR'][e+1]):
+
+===== PAGE 31 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+30
+82
+tid = graph['TRI_DATA'][idx]
+83
+tri_state[tid] += 1
+84
+if tri_state[tid]==3:
+85
+cur_tri += 1
+86
+for e in prefix:
+87
+mask |= (1<<e)
+88
+for idx in range(graph['TRI_PTR'][e], graph['TRI_PTR'][e+1]):
+89
+tid = graph['TRI_DATA'][idx]
+90
+tri_state[tid] += 1
+91
+if tri_state[tid]==3:
+92
+cur_tri += 1
+93
+if cur_tri >= k:
+94
+return True, mask, cur_tri
+95
+ok, fm, ft = numba_dfs(0, 0, mask, cur_tri, tri_state, rem, need, k,
+96
+graph['TRI_PTR'], graph['TRI_DATA'])
+97
+return (True, fm, ft) if ok else (False, 0, 0)
+98
+99
+def bruteforce_one(k, graph, max_c=None, start_c=0, verbose=True, pool=None):
+100
+if graph['H0_TRI'] >= k:
+101
+return graph['N_H0'], graph['H0_TRI'], graph['H0_MASK']
+102
+VA = graph['VAR_ARRAY']
+103
+if max_c is None:
+104
+max_c = len(VA)
+105
+start_c = max(start_c, 1)
+106
+for c in range(start_c, max_c+1):
+107
+total = comb(len(VA), c)
+108
+if verbose:
+109
+print(f"
+k={k}: 尝试c={c} 条新边(共{total:,} 种组合) ...", end=" ",
+flush=True)
+110
+firsts = VA[:len(VA)-c+1]
+111
+tasks = [([e], VA[np.where(VA==e)[0][0]+1:], c-1, k, graph) for e in firsts]
+112
+results = pool.map(search_worker, tasks)
+113
+for ok, mask, t in results:
+114
+if ok:
+115
+if verbose:
+116
+print("￿")
+117
+return graph['N_H0'] + c, t, mask
+118
+if verbose:
+119
+print("无解")
+120
+return None, None, None
+121
+122
+def main():
+123
+# 构建图结构（边到三角形的映射）
+124
+edge_to_tris = [[] for _ in range(M)]
+125
+for ti, tri_edges in enumerate(TRI_EDGES):
+
+===== PAGE 32 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+31
+126
+for edge_idx in tri_edges:
+127
+edge_to_tris[edge_idx].append(ti)
+128
+ptr, data = [0], []
+129
+for e in range(M):
+130
+for t in edge_to_tris[e]: data.append(t)
+131
+ptr.append(len(data))
+132
+graph = {
+133
+'N': N, 'M': M, 'N_H0': N_H0, 'H0_MASK': H0_MASK,
+134
+'H0_TRI': count_triangles(H0_MASK),
+135
+'VAR_ARRAY': np.array(VARIABLE_INDICES, dtype=np.int64),
+136
+'TRI_COUNT': len(TRI_MASKS),
+137
+'TRI_PTR': np.array(ptr, dtype=np.int64),
+138
+'TRI_DATA': np.array(data, dtype=np.int64),
+139
+'EDGES': EDGES
+140
+}
+141
+142
+pool = mp.Pool(processes=min(mp.cpu_count(), 8))
+143
+print(f"开始n=9 枚举(k=1..84)")
+144
+results = {}
+145
+for k in range(1, 85):
+146
+e, t, mask = bruteforce_one(k, graph, max_c=30, start_c=0,
+147
+verbose=False, pool=pool)
+148
+results[k] = {'E': e, 'T': t, 'mask': int(mask) if mask else 0}
+149
+print(f"k={k:2d}: E={e:2d}, T={t:2d}")
+150
+pool.close(); pool.join()
+151
+152
+# 输出表格
+153
+print("\nE(9,k) 表:")
+154
+for k in range(1,85):
+155
+print(f"k={k:2d}: E={results[k]['E']:2d}")
+156
+157
+if __name__ == "__main__":
+158
+main()
+B.2 代码A 运行输出（完整）
+Listing 5: 代码A 完整运行输出
+开始n=9 枚举(k=1..84)
+k= 1: E= 7, T= 1
+k= 2: E= 8, T= 2
+k= 3: E= 9, T= 3
+k= 4: E= 9, T= 4
+k= 5: E=10, T= 5
+k= 6: E=11, T= 7
+k= 7: E=11, T= 7
+
+===== PAGE 33 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+32
+k= 8: E=12, T=10
+k= 9: E=12, T=10
+k=10: E=12, T=10
+k=11: E=14, T=11
+k=12: E=15, T=12
+k=13: E=15, T=13
+k=14: E=16, T=14
+k=15: E=16, T=16
+k=16: E=16, T=16
+k=17: E=17, T=17
+k=18: E=17, T=20
+k=19: E=17, T=20
+k=20: E=17, T=20
+k=21: E=18, T=21
+k=22: E=19, T=22
+k=23: E=19, T=23
+k=24: E=20, T=26
+k=25: E=20, T=26
+k=26: E=20, T=26
+k=27: E=21, T=30
+k=28: E=21, T=30
+k=29: E=21, T=30
+k=30: E=21, T=30
+k=31: E=22, T=35
+k=32: E=22, T=35
+k=33: E=22, T=35
+k=34: E=22, T=35
+k=35: E=22, T=35
+k=36: E=24, T=36
+k=37: E=25, T=37
+k=38: E=25, T=38
+k=39: E=26, T=39
+k=40: E=26, T=40
+k=41: E=26, T=41
+k=42: E=27, T=42
+k=43: E=27, T=45
+k=44: E=27, T=45
+k=45: E=27, T=45
+k=46: E=28, T=46
+k=47: E=28, T=50
+k=48: E=28, T=50
+k=49: E=28, T=50
+k=50: E=28, T=50
+k=51: E=29, T=51
+k=52: E=29, T=56
+k=53: E=29, T=56
+k=54: E=29, T=56
+k=55: E=29, T=56
+k=56: E=29, T=56
+
+===== PAGE 34 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+33
+k=57: E=30, T=57
+k=58: E=31, T=59
+k=59: E=31, T=59
+k=60: E=32, T=60
+k=61: E=32, T=62
+k=62: E=32, T=62
+k=63: E=33, T=65
+k=64: E=33, T=65
+k=65: E=33, T=65
+k=66: E=33, T=66
+k=67: E=34, T=71
+k=68: E=34, T=71
+k=69: E=34, T=71
+k=70: E=34, T=71
+k=71: E=34, T=71
+k=72: E=35, T=77
+k=73: E=35, T=77
+k=74: E=35, T=77
+k=75: E=35, T=77
+k=76: E=35, T=77
+k=77: E=35, T=77
+k=78: E=36, T=84
+k=79: E=36, T=84
+k=80: E=36, T=84
+k=81: E=36, T=84
+k=82: E=36, T=84
+k=83: E=36, T=84
+k=84: E=36, T=84
+E(9,k) 表:
+k= 1: E= 7
+k= 2: E= 8
+k= 3: E= 9
+k= 4: E= 9
+k= 5: E=10
+k= 6: E=11
+k= 7: E=11
+k= 8: E=12
+k= 9: E=12
+k=10: E=12
+k=11: E=14
+k=12: E=15
+k=13: E=15
+k=14: E=16
+k=15: E=16
+k=16: E=16
+k=17: E=17
+k=18: E=17
+k=19: E=17
+
+===== PAGE 35 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+34
+k=20: E=17
+k=21: E=18
+k=22: E=19
+k=23: E=19
+k=24: E=20
+k=25: E=20
+k=26: E=20
+k=27: E=21
+k=28: E=21
+k=29: E=21
+k=30: E=21
+k=31: E=22
+k=32: E=22
+k=33: E=22
+k=34: E=22
+k=35: E=22
+k=36: E=24
+k=37: E=25
+k=38: E=25
+k=39: E=26
+k=40: E=26
+k=41: E=26
+k=42: E=27
+k=43: E=27
+k=44: E=27
+k=45: E=27
+k=46: E=28
+k=47: E=28
+k=48: E=28
+k=49: E=28
+k=50: E=28
+k=51: E=29
+k=52: E=29
+k=53: E=29
+k=54: E=29
+k=55: E=29
+k=56: E=29
+k=57: E=30
+k=58: E=31
+k=59: E=31
+k=60: E=32
+k=61: E=32
+k=62: E=32
+k=63: E=33
+k=64: E=33
+k=65: E=33
+k=66: E=33
+k=67: E=34
+k=68: E=34
+
+===== PAGE 36 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+35
+k=69: E=34
+k=70: E=34
+k=71: E=34
+k=72: E=35
+k=73: E=35
+k=74: E=35
+k=75: E=35
+k=76: E=35
+k=77: E=35
+k=78: E=36
+k=79: E=36
+k=80: E=36
+k=81: E=36
+k=82: E=36
+k=83: E=36
+k=84: E=36

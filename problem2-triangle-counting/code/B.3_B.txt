@@ -1,0 +1,401 @@
+B.3 代码B：n = 10 低区间SAT 验证（完整）
+Listing 6: 代码B：n = 10 低区间SAT 验证程序（PySAT）
+1
+#!/usr/bin/env python3
+2
+"""
+3
+第一问SAT 验证程序（n=10, k￿84）
+4
+证明：对于所有1￿k￿84，E(10,k) = E(9,k)
+5
+使用IDPool 统一管理变量，彻底消除变量编号冲突。
+6
+"""
+7
+8
+from pysat.solvers import Solver
+9
+from pysat.card import CardEnc
+10
+from pysat.formula import IDPool
+11
+from itertools import combinations
+12
+import time, multiprocessing as mp, os, json
+13
+from math import comb
+14
+15
+# 第一问穷举的E(9,k) 表
+16
+E9 = [0] * 85
+17
+E9[1] = 7; E9[2] = 8; E9[3] = 9; E9[4] = 9; E9[5] = 10
+18
+E9[6] = 11; E9[7] = 11; E9[8] = 12; E9[9] = 12; E9[10] = 12
+19
+E9[11] = 14; E9[12] = 15; E9[13] = 15; E9[14] = 16; E9[15] = 16
+20
+E9[16] = 16; E9[17] = 17; E9[18] = 17; E9[19] = 17; E9[20] = 17
+21
+E9[21] = 18; E9[22] = 19; E9[23] = 19; E9[24] = 20; E9[25] = 20
+22
+E9[26] = 20; E9[27] = 21; E9[28] = 21; E9[29] = 21; E9[30] = 21
+23
+E9[31] = 22; E9[32] = 22; E9[33] = 22; E9[34] = 22; E9[35] = 22
+24
+E9[36] = 24; E9[37] = 25; E9[38] = 25; E9[39] = 26; E9[40] = 26
+25
+E9[41] = 26; E9[42] = 27; E9[43] = 27; E9[44] = 27; E9[45] = 27
+26
+E9[46] = 28; E9[47] = 28; E9[48] = 28; E9[49] = 28; E9[50] = 28
+
+===== PAGE 37 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+36
+27
+E9[51] = 29; E9[52] = 29; E9[53] = 29; E9[54] = 29; E9[55] = 29
+28
+E9[56] = 29; E9[57] = 30; E9[58] = 31; E9[59] = 31; E9[60] = 32
+29
+E9[61] = 32; E9[62] = 32; E9[63] = 33; E9[64] = 33; E9[65] = 33
+30
+E9[66] = 33; E9[67] = 34; E9[68] = 34; E9[69] = 34; E9[70] = 34
+31
+E9[71] = 34; E9[72] = 35; E9[73] = 35; E9[74] = 35; E9[75] = 35
+32
+E9[76] = 35; E9[77] = 35; E9[78] = 36; E9[79] = 36; E9[80] = 36
+33
+E9[81] = 36; E9[82] = 36; E9[83] = 36; E9[84] = 36
+34
+35
+H0 = [(0,1),(0,2),(0,3),(0,4),(5,6),(7,8)]
+36
+H0_set = {tuple(sorted(e)) for e in H0}
+37
+38
+CACHE_FILE = "sat_cache_10_v2.json"
+39
+40
+def max_triangles(e):
+41
+"""Kruskal–Katona 上界：给定总边数e，无限制图的最大三角形数"""
+42
+if e < 6: return 0
+43
+a1 = 0
+44
+while comb(a1 + 1, 2) <= e: a1 += 1
+45
+rem = e - comb(a1, 2)
+46
+if rem == 0: return comb(a1, 3)
+47
+else: return comb(a1, 3) + comb(rem, 2)
+48
+49
+def build_and_solve(k, target_edges):
+50
+"""使用IDPool 统一管理变量，构建SAT 实例并求解"""
+51
+n = 10
+52
+vpool = IDPool()
+53
+solver = Solver()
+54
+55
+edges = list(combinations(range(n), 2))
+56
+57
+# 可选边变量
+58
+edge_var = {}
+59
+for e in edges:
+60
+if e not in H0_set:
+61
+edge_var[e] = vpool.id(("edge", e))
+62
+63
+extra = target_edges - 6
+64
+if extra < 0 or extra > len(edge_var):
+65
+solver.delete()
+66
+return False
+67
+68
+# 边数精确约束（使用vpool 避免变量冲突）
+69
+if extra == len(edge_var):
+70
+for v in edge_var.values():
+71
+solver.add_clause([v])
+
+===== PAGE 38 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+37
+72
+else:
+73
+cnf_atmost = CardEnc.atmost(lits=list(edge_var.values()), bound=extra, vpool=
+vpool)
+74
+cnf_atleast = CardEnc.atleast(lits=list(edge_var.values()), bound=extra, vpool=
+vpool)
+75
+solver.append_formula(cnf_atmost.clauses)
+76
+solver.append_formula(cnf_atleast.clauses)
+77
+78
+def optional_edge_var(u, v):
+79
+e = tuple(sorted((u, v)))
+80
+if e in H0_set:
+81
+return None
+82
+return edge_var[e]
+83
+84
+tri_indicators = []
+85
+for x, y, z in combinations(range(n), 3):
+86
+opt_vars = [v for v in (
+87
+optional_edge_var(x, y),
+88
+optional_edge_var(x, z),
+89
+optional_edge_var(y, z)
+90
+) if v is not None]
+91
+92
+if not opt_vars:
+93
+continue
+94
+95
+# 使用vpool 创建三角形指示变量
+96
+act = vpool.id(("tri", x, y, z))
+97
+for v in opt_vars:
+98
+solver.add_clause([-act, v])
+99
+solver.add_clause([act] + [-v for v in opt_vars])
+100
+tri_indicators.append(act)
+101
+102
+if k > len(tri_indicators):
+103
+solver.delete()
+104
+return False
+105
+106
+# 三角形数至少为k（使用vpool 避免变量冲突）
+107
+if k == len(tri_indicators):
+108
+for act in tri_indicators:
+109
+solver.add_clause([act])
+110
+else:
+111
+cnf_tri = CardEnc.atleast(lits=tri_indicators, bound=k, vpool=vpool)
+112
+solver.append_formula(cnf_tri.clauses)
+113
+114
+sat = solver.solve()
+
+===== PAGE 39 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+38
+115
+solver.delete()
+116
+return sat
+117
+118
+def solve_k(k):
+119
+E9k = E9[k]
+120
+for e in range(6, E9k):
+121
+if max_triangles(e) < k:
+# 理论上界排除
+122
+continue
+123
+if build_and_solve(k, e):
+124
+return (k, e, True)
+125
+return (k, None, False)
+126
+127
+def main():
+128
+tasks = list(range(1, 85))
+129
+cache = {}
+130
+if os.path.exists(CACHE_FILE):
+131
+with open(CACHE_FILE, 'r') as f:
+132
+cache = json.load(f)
+133
+134
+new_tasks = [k for k in tasks if str(k) not in cache]
+135
+print(f"待验证: {len(new_tasks)} 个k 值")
+136
+137
+with mp.Pool(processes=8) as pool:
+138
+for k, e, found in pool.imap_unordered(solve_k, new_tasks):
+139
+if found:
+140
+print(f"￿发现反例: k={k}, e={e}")
+141
+return
+142
+else:
+143
+print(f"￿k={k:2d}: 验证通过")
+144
+cache[str(k)] = "PASS"
+145
+with open(CACHE_FILE, 'w') as f:
+146
+json.dump(cache, f)
+147
+148
+print("所有k 值验证通过。结论：E(10,k) = E(9,k) 对所有1￿k￿84 成立。")
+149
+150
+if __name__ == "__main__":
+151
+main()
+实现注记。代码B 中求解器初始化为Solver()（PySAT 默认后端m22）。正式运行环境（见附录
+A 计算环境）使用的是CaDiCaL 1.9.5 后端（Solver(name='cadical195')）；实测默认m22 后
+端在部分实例上超出合理时限，且与多进程组合时存在偶发崩溃，故复现时请改用cadical195。
+本附录B.4 的输出即由CaDiCaL 1.9.5 后端产生。
+B.4 代码B 运行输出（完整）
+
+===== PAGE 40 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+39
+Listing 7: 代码B 完整运行输出
+待验证: 84 个k 值
+￿k= 1: 验证通过
+￿k= 2: 验证通过
+￿k= 3: 验证通过
+￿k= 4: 验证通过
+￿k= 5: 验证通过
+￿k= 6: 验证通过
+￿k= 7: 验证通过
+￿k= 8: 验证通过
+￿k= 9: 验证通过
+￿k=11: 验证通过
+￿k=10: 验证通过
+￿k=12: 验证通过
+￿k=13: 验证通过
+￿k=14: 验证通过
+￿k=15: 验证通过
+￿k=16: 验证通过
+￿k=19: 验证通过
+￿k=21: 验证通过
+￿k=20: 验证通过
+￿k=22: 验证通过
+￿k=17: 验证通过
+￿k=18: 验证通过
+￿k=23: 验证通过
+￿k=24: 验证通过
+￿k=25: 验证通过
+￿k=26: 验证通过
+￿k=27: 验证通过
+￿k=28: 验证通过
+￿k=30: 验证通过
+￿k=31: 验证通过
+￿k=33: 验证通过
+￿k=32: 验证通过
+￿k=34: 验证通过
+￿k=35: 验证通过
+￿k=29: 验证通过
+￿k=36: 验证通过
+￿k=37: 验证通过
+￿k=39: 验证通过
+￿k=40: 验证通过
+￿k=41: 验证通过
+￿k=38: 验证通过
+￿k=42: 验证通过
+￿k=44: 验证通过
+￿k=45: 验证通过
+￿k=43: 验证通过
+￿k=46: 验证通过
+￿k=50: 验证通过
+
+===== PAGE 41 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+40
+￿k=48: 验证通过
+￿k=51: 验证通过
+￿k=57: 验证通过
+￿k=58: 验证通过
+￿k=59: 验证通过
+￿k=60: 验证通过
+￿k=61: 验证通过
+￿k=62: 验证通过
+￿k=63: 验证通过
+￿k=64: 验证通过
+￿k=65: 验证通过
+￿k=66: 验证通过
+￿k=52: 验证通过
+￿k=68: 验证通过
+￿k=69: 验证通过
+￿k=70: 验证通过
+￿k=71: 验证通过
+￿k=72: 验证通过
+￿k=67: 验证通过
+￿k=73: 验证通过
+￿k=75: 验证通过
+￿k=74: 验证通过
+￿k=76: 验证通过
+￿k=77: 验证通过
+￿k=78: 验证通过
+￿k=79: 验证通过
+￿k=80: 验证通过
+￿k=81: 验证通过
+￿k=82: 验证通过
+￿k=83: 验证通过
+￿k=84: 验证通过
+￿k=47: 验证通过
+￿k=49: 验证通过
+￿k=55: 验证通过
+￿k=54: 验证通过
+￿k=56: 验证通过
+￿k=53: 验证通过
+所有k 值验证通过。结论：E(10,k) = E(9,k) 对所有1￿k￿84 成立。

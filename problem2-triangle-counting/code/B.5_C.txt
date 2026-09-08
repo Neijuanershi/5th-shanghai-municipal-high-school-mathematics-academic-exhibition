@@ -1,0 +1,428 @@
+B.5 代码C：n ≥11 归约后SAT 验证（完整）
+Listing 8: 代码C：n ≥11 归约后SAT 验证程序（PySAT + CaDiCaL 1.9.5）
+1
+#!/usr/bin/env python3
+2
+"""
+3
+第二问SAT 验证程序（最终版）
+4
+定理2.1 的计算机辅助验证。
+5
+运行前请删除旧缓存文件sat_cache_q2_final.json。
+
+===== PAGE 42 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+41
+6
+"""
+7
+8
+from pysat.solvers import Solver
+9
+from pysat.card import CardEnc, EncType
+10
+from pysat.formula import IDPool
+11
+from itertools import combinations
+12
+import time, multiprocessing as mp, os, json
+13
+from math import comb
+14
+15
+# ---------- 配置----------
+16
+CACHE_FILE = "sat_cache_q2_final.json"
+17
+CACHE_VERSION = "q2-final-20250722"
+18
+SOLVER_NAME = "cadical195"
+# 正式运行使用CaDiCaL 1.9.5
+19
+TRI_ENCODING = EncType.cardnetwrk
+# 三角形基数编码
+20
+EDGE_ENCODING = EncType.seqcounter
+# 边数基数编码
+21
+TRI_ENC_NAME = "cardnetwrk"
+22
+EDGE_ENC_NAME = "seqcounter"
+23
+# --------------------------
+24
+25
+E9 = [0]*85
+26
+E9[1] = 7; E9[2] = 8; E9[3] = 9; E9[4] = 9; E9[5] = 10
+27
+E9[6] = 11; E9[7] = 11; E9[8] = 12; E9[9] = 12; E9[10] = 12
+28
+E9[11] = 14; E9[12] = 15; E9[13] = 15; E9[14] = 16; E9[15] = 16
+29
+E9[16] = 16; E9[17] = 17; E9[18] = 17; E9[19] = 17; E9[20] = 17
+30
+E9[21] = 18; E9[22] = 19; E9[23] = 19; E9[24] = 20; E9[25] = 20
+31
+E9[26] = 20; E9[27] = 21; E9[28] = 21; E9[29] = 21; E9[30] = 21
+32
+E9[31] = 22; E9[32] = 22; E9[33] = 22; E9[34] = 22; E9[35] = 22
+33
+E9[36] = 24; E9[37] = 25; E9[38] = 25; E9[39] = 26; E9[40] = 26
+34
+E9[41] = 26; E9[42] = 27; E9[43] = 27; E9[44] = 27; E9[45] = 27
+35
+E9[46] = 28; E9[47] = 28; E9[48] = 28; E9[49] = 28; E9[50] = 28
+36
+E9[51] = 29; E9[52] = 29; E9[53] = 29; E9[54] = 29; E9[55] = 29
+37
+E9[56] = 29; E9[57] = 30; E9[58] = 31; E9[59] = 31; E9[60] = 32
+38
+E9[61] = 32; E9[62] = 32; E9[63] = 33; E9[64] = 33; E9[65] = 33
+39
+E9[66] = 33; E9[67] = 34; E9[68] = 34; E9[69] = 34; E9[70] = 34
+40
+E9[71] = 34; E9[72] = 35; E9[73] = 35; E9[74] = 35; E9[75] = 35
+41
+E9[76] = 35; E9[77] = 35; E9[78] = 36; E9[79] = 36; E9[80] = 36
+42
+E9[81] = 36; E9[82] = 36; E9[83] = 36; E9[84] = 36
+43
+44
+H0 = [(0,1),(0,2),(0,3),(0,4),(5,6),(7,8)]
+45
+H0_set = {tuple(sorted(e)) for e in H0}
+46
+47
+def make_solver():
+48
+return Solver(name=SOLVER_NAME)
+49
+50
+def verify_witness(k, m, chosen_edges):
+
+===== PAGE 43 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+42
+51
+n = 9 + m
+52
+edge_set = set(H0_set) | chosen_edges
+53
+assert len(edge_set) < E9[k], f"边数{len(edge_set)} 不小于E9[{k}]={E9[k]}"
+54
+tri = 0
+55
+tri_by_vert = [0]*n
+56
+for x, y, z in combinations(range(n), 3):
+57
+if ((x,y) in edge_set or (y,x) in edge_set) and \
+58
+((x,z) in edge_set or (z,x) in edge_set) and \
+59
+((y,z) in edge_set or (z,y) in edge_set):
+60
+tri += 1
+61
+tri_by_vert[x] += 1; tri_by_vert[y] += 1; tri_by_vert[z] += 1
+62
+assert tri >= k, f"三角形数{tri} < k={k}"
+63
+for u in range(9, n):
+64
+assert tri_by_vert[u] >= 1, f"自由点{u} 不在任何三角形中"
+65
+return tri
+66
+67
+def build_and_solve(k, m):
+68
+n = 9 + m
+69
+vpool = IDPool()
+70
+solver = make_solver()
+71
+edges = [(i,j) for i in range(n) for j in range(i+1, n)]
+72
+edge_var = {}
+73
+for e in edges:
+74
+if e not in H0_set:
+75
+edge_var[e] = vpool.id(("edge", e))
+76
+all_vars = list(edge_var.values())
+77
+max_extra = E9[k] - 7
+78
+if max_extra < 0:
+79
+solver.delete()
+80
+return False, None
+81
+cnf_edges = CardEnc.atmost(lits=all_vars, bound=max_extra,
+82
+vpool=vpool, encoding=EDGE_ENCODING)
+83
+solver.append_formula(cnf_edges.clauses)
+84
+free_tri_acts = {u: [] for u in range(9, n)}
+85
+def edge_exists(ed):
+86
+if ed in H0_set: return None
+87
+return edge_var[ed]
+88
+tri_inds = []
+89
+for x, y, z in combinations(range(n), 3):
+90
+e1 = edge_exists(tuple(sorted((x,y))))
+91
+e2 = edge_exists(tuple(sorted((x,z))))
+92
+e3 = edge_exists(tuple(sorted((y,z))))
+93
+opt_vars = [v for v in (e1,e2,e3) if v is not None]
+94
+if not opt_vars: continue
+95
+act = vpool.id(("tri", x, y, z))
+
+===== PAGE 44 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+43
+96
+for v in opt_vars: solver.add_clause([-act, v])
+97
+solver.add_clause([act] + [-v for v in opt_vars])
+98
+tri_inds.append(act)
+99
+for u in (x,y,z):
+100
+if u >= 9: free_tri_acts[u].append(act)
+101
+if k > len(tri_inds):
+102
+solver.delete()
+103
+return False, None
+104
+if k == len(tri_inds):
+105
+for act in tri_inds: solver.add_clause([act])
+106
+else:
+107
+cnf_tri = CardEnc.atleast(lits=tri_inds, bound=k,
+108
+vpool=vpool, encoding=TRI_ENCODING)
+109
+solver.append_formula(cnf_tri.clauses)
+110
+for u in range(9, n):
+111
+assert free_tri_acts[u], f"自由点{u} 无候选三角形"
+112
+solver.add_clause(free_tri_acts[u])
+113
+sat = solver.solve()
+114
+witness = None
+115
+if sat:
+116
+model = {v for v in solver.get_model() if v > 0}
+117
+witness = {e for e, var in edge_var.items() if var in model}
+118
+solver.delete()
+119
+return sat, witness
+120
+121
+def solve_task(args):
+122
+k, m = args
+123
+sat, witness = build_and_solve(k, m)
+124
+if sat:
+125
+verify_witness(k, m, witness)
+126
+return (k, m, True, witness)
+127
+return (k, m, False, None)
+128
+129
+def main():
+130
+tasks = []
+131
+for k in range(1, 85):
+132
+max_m = E9[k] - 7
+133
+for m in range(2, max_m+1):
+134
+tasks.append((k, m))
+135
+assert len(tasks) == 1426, f"任务总数应为1426，实际{len(tasks)}"
+136
+cache = {}
+137
+if os.path.exists(CACHE_FILE):
+138
+with open(CACHE_FILE, "r", encoding="utf-8") as f:
+139
+cache = json.load(f)
+140
+expected_meta = {
+
+===== PAGE 45 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+44
+141
+"version": CACHE_VERSION,
+142
+"solver": SOLVER_NAME,
+143
+"edge_encoding": EDGE_ENC_NAME,
+144
+"tri_encoding": TRI_ENC_NAME,
+145
+"expected_tasks": 1426
+146
+}
+147
+if cache.get("meta") != expected_meta:
+148
+print("缓存元数据不匹配，忽略旧缓存")
+149
+cache = {}
+150
+if "results" not in cache:
+151
+cache["results"] = {}
+152
+cache["meta"] = {
+153
+"version": CACHE_VERSION,
+154
+"solver": SOLVER_NAME,
+155
+"edge_encoding": EDGE_ENC_NAME,
+156
+"tri_encoding": TRI_ENC_NAME,
+157
+"expected_tasks": 1426
+158
+}
+159
+new_tasks = [(k,m) for (k,m) in tasks
+160
+if cache["results"].get(f"{k}_{m}") != "PASS"]
+161
+print(f"总任务数: {len(tasks)}, 待完成: {len(new_tasks)}")
+162
+if not new_tasks:
+163
+expected_keys = {f"{k}_{m}" for k, m in tasks}
+164
+passed_keys = {key for key, value in cache["results"].items() if value == "PASS
+"}
+165
+assert expected_keys <= passed_keys, "缓存缺少预期PASS 任务"
+166
+print("缓存中的全部1426 个预期实例均为PASS。")
+167
+return
+168
+PROCESSES = 1
+169
+with mp.Pool(processes=PROCESSES) as pool:
+170
+for k, m, sat, witness in pool.imap_unordered(solve_task, new_tasks):
+171
+if sat:
+172
+result = {
+173
+"k": k, "m": m, "n": 9+m,
+174
+"forced_edges": sorted(H0_set),
+175
+"chosen_edges": sorted(witness)
+176
+}
+177
+with open("counterexample.json", "w") as f:
+178
+json.dump(result, f, indent=2)
+179
+print(f"￿发现并保存反例: k={k}, m={m}")
+180
+pool.terminate()
+181
+pool.join()
+182
+return
+183
+else:
+184
+print(f"￿k={k:2d}, m={m:2d}: UNSAT")
+
+===== PAGE 46 =====
+4
+第四问：连通且三角形边不交的极值函数F(n, k)
+45
+185
+cache["results"][f"{k}_{m}"] = "PASS"
+186
+temp_file = CACHE_FILE + ".tmp"
+187
+with open(temp_file, "w", encoding="utf-8") as f:
+188
+json.dump(cache, f)
+189
+f.flush()
+190
+os.fsync(f.fileno())
+191
+os.replace(temp_file, CACHE_FILE)
+192
+assert all(cache["results"].get(f"{k}_{m}") == "PASS" for k,m in tasks), \
+193
+"任务未完全通过"
+194
+print("所有1426 个实例均为UNSAT。命题2.1 已通过计算机辅助验证。")
+195
+196
+if __name__ == "__main__":
+197
+main()
+B.6 代码C 运行输出
+Listing 9: 代码C 运行输出（摘录）
+总任务数: 1426, 待完成: 1426
+￿k= 3, m= 2: UNSAT
+￿k= 4, m= 2: UNSAT
+￿k= 5, m= 2: UNSAT
+...
+￿k=84, m=29: UNSAT
+所有1426 个实例均为UNSAT。命题2.1 已通过计算机辅助验证。
+说明。代码C 的完整运行日志共1426 行（每行对应一个(k, m) 实例，全部为UNSAT），随本文
+附电子文件；日志首尾与上表摘录一致。全部实例总数∑84
+k=1 max{E(9, k) −8, 0} = 1426 已由程
+序内断言复核。
