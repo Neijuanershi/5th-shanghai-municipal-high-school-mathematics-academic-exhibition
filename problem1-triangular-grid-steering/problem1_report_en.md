@@ -357,6 +357,8 @@ The Python sources are intentionally *not* reproduced in this document; they are
 
 The complete source of the formalisation is reproduced below verbatim. (Files `lakefile.toml`, `lean-toolchain`, and the two `.md` design documents are in the repository and omitted here for brevity.)
 
+Note: the source files are reproduced verbatim from `lean-formalization/` except that comments have been translated into English for readability; the code is unchanged.
+
 ### `Q2Formal.lean`
 
 ```lean
@@ -370,11 +372,13 @@ import Q2Formal.Main
 
 ```lean
 /-
-第二问下界 "N(n) ≥ 4n+1 (∀ n ≥ 2)" 组合层形式化 —— 离散模型
-(设计文档 `Q2_lean_baseline_plan.md` v4.4 第 1 节, 逐字遵守)
+Combinatorial-layer formalisation of the Subproblem 2 lower bound
+"N(n) ≥ 4n+1 (∀ n ≥ 2)" — the discrete model
+(design document `Q2_lean_baseline_plan.md` v4.4 §1, followed verbatim)
 
-注: 设计终版 v4.4 中, 公理 A 为前缀形式(见 `Axioms.lean` 的 `base_nine`)。
-语义绑定: 见 `README.md` 第 6 节对应清单; 本文件不引用任何第三问文件。
+Note: in the final design version v4.4, Axiom A is in prefix form (see `base_nine`
+in `Axioms.lean`). Semantic binding: see the corresponding checklist in `README.md` §6;
+this file does not reference any Subproblem 3 file.
 -/
 import Mathlib
 
@@ -382,39 +386,43 @@ noncomputable section
 
 open scoped Classical
 
-/-- 计划: 初始航向 + 转向卡列表。`steps` 的每个元素 `(θᵢ, τᵢ)` 是第 i 张转向卡的
-    转角与生效时刻, τ 严格递增(题面: 每张卡转角 ≤ 5°, 语义绑定见 README 第 1 条)。
-    路径由原点出发、时刻 0 起、速度归一为 1。 -/
+/-- Plan: initial heading + list of steering cards. Each element `(θᵢ, τᵢ)` of `steps` is
+    the turn angle and activation time of the i-th steering card, with τ strictly increasing
+    (problem statement: each card turns at most 5°; semantic binding see README item 1).
+    The path starts at the origin, at time 0, with speed normalised to 1. -/
 structure Plan where
   heading0 : ℝ
   steps    : List (ℝ × ℝ)
 
 namespace Plan
 
-/-- 卡数。设计文档第 1 节记 `cards : ℕ -- = steps.length`; 此处以定义式访问器实现,
-    使 `p.cards = p.steps.length` 为定义相等(记账引理 Counting.lean 直接使用)。 -/
+/-- Card count. The design document §1 records `cards : ℕ -- = steps.length`; here it is
+    implemented as a definitional accessor, making `p.cards = p.steps.length` a definitional
+    equality (used directly by the bookkeeping lemmas in Counting.lean). -/
 def cards (p : Plan) : ℕ := p.steps.length
 
 end Plan
 
-/-- 不透明谓词(语义绑定 README 第 6.2 条): "p 在时刻 t 已逃出第 k 层栅栏" -/
+/-- Opaque predicate (semantic binding README item 6.2): "p has escaped the k-th fence by time t" -/
 opaque Escaped : Plan → ℕ → ℝ → Prop
 
-/-- 首次逃出谓词(v4.2: Classical.choose 只能取任意见证, 故"首次"必须谓词化) -/
+/-- First-escape predicate (v4.2: Classical.choose can only pick an arbitrary witness, so
+    "first" must be expressed as a predicate) -/
 def FirstEscape (p : Plan) (k : ℕ) (t : ℝ) : Prop :=
   Escaped p k t ∧ ∀ s < t, ¬ Escaped p k s
 
-/-- 方向角 θ 的单位方向向量 -/
+/-- Unit direction vector for heading angle θ -/
 def dirVec (θ : ℝ) : ℝ × ℝ := (Real.cos θ, Real.sin θ)
 
-/-- 平面向量加法 -/
+/-- Planar vector addition -/
 def vecAdd (a b : ℝ × ℝ) : ℝ × ℝ := (a.1 + b.1, a.2 + b.2)
 
-/-- 平面向量数乘 -/
+/-- Scalar multiplication of a planar vector -/
 def vecSmul (r : ℝ) (a : ℝ × ℝ) : ℝ × ℝ := (r * a.1, r * a.2)
 
-/-- 轨迹重建: 按 τᵢ 分界逐段直线; 第 i 段方向 = heading0 + Σ_{j<i} θⱼ, 速度归一为 1;
-    分界点即 steps 的时刻。 -/
+/-- Trajectory reconstruction: piecewise-linear in time, split at the τᵢ; the direction of the
+    i-th segment is heading0 + Σ_{j<i} θⱼ, with speed normalised to 1; the breakpoints are the
+    times in steps. -/
 def pathPoint (p : Plan) (t : ℝ) : ℝ × ℝ :=
   let rec go (pos : ℝ × ℝ) (heading : ℝ) (time : ℝ) : List (ℝ × ℝ) → ℝ × ℝ
     | [] => vecAdd pos (vecSmul (t - time) (dirVec heading))
@@ -425,38 +433,41 @@ def pathPoint (p : Plan) (t : ℝ) : ℝ × ℝ :=
           vecAdd pos (vecSmul (t - time) (dirVec heading))
   go (0, 0) p.heading0 0 p.steps
 
-/-- 格点 m e₁ + n e₂, 其中 e₁ = (20, 0), e₂ = (10, 10√3) -/
+/-- Lattice point m e₁ + n e₂, where e₁ = (20, 0), e₂ = (10, 10√3) -/
 def latticePoint (m n : ℤ) : ℝ × ℝ :=
   ((20 : ℝ) * (m : ℝ) + (10 : ℝ) * (n : ℝ), (10 : ℝ) * Real.sqrt 3 * (n : ℝ))
 
-/-- 六边形范数 max(|m|, |n|, |m+n|) —— 第 k 层的层号 -/
+/-- Hexagonal norm max(|m|, |n|, |m+n|) — the layer index of the k-th layer -/
 def layerIndex (m n : ℤ) : ℕ :=
   max (Int.natAbs m) (max (Int.natAbs n) (Int.natAbs (m + n)))
 
-/-- 第 k 层格点集 = { m e₁ + n e₂ | max(|m|,|n|,|m+n|) = k } (k ≥ 1) -/
+/-- The set of lattice points in the k-th layer = { m e₁ + n e₂ | max(|m|,|n|,|m+n|) = k } (k ≥ 1) -/
 def Layer (k : ℕ) : Set (ℝ × ℝ) :=
   { c | ∃ m n : ℤ, c = latticePoint m n ∧ layerIndex m n = k }
 
-/-- 两点距离 -/
+/-- Distance between two points -/
 def planDist (a b : ℝ × ℝ) : ℝ := Real.sqrt ((a.1 - b.1) ^ 2 + (a.2 - b.2) ^ 2)
 
-/-- 分层 Valid: 轨迹全程与第 1..n 层格点距离 ≥ 9 -/
+/-- Layerwise Valid: the trajectory keeps distance ≥ 9 from every lattice point of layers 1..n
+    at all times -/
 def Valid (n : ℕ) (p : Plan) : Prop :=
   ∀ k : ℕ, 1 ≤ k → k ≤ n → ∀ t : ℝ, ∀ c : ℝ × ℝ, c ∈ Layer k → planDist (pathPoint p t) c ≥ 9
 
-/-- 区间卡数(v4.2): 半开区间 [t₁, t₂) 内的转向卡数 -/
+/-- Interval card count (v4.2): the number of steering cards in the half-open interval [t₁, t₂) -/
 def CrossCards (p : Plan) (t₁ t₂ : ℝ) : ℕ :=
   (p.steps.filter (fun st => t₁ ≤ st.2 ∧ st.2 < t₂)).length
 
-/-- 区间卡数(闭): [t₁, t₂] 内的转向卡数。
-    v4.5 修订: 公理 A 改用本定义 (前缀闭区间化) —— 第二问弦上大转角转向
-    可恰发生在首次逃出第 2 层的时刻, 该卡必须计入前缀 9 卡。 -/
+/-- Interval card count (closed): the number of steering cards in [t₁, t₂].
+    v4.5 revision: Axiom A now uses this definition (closing the prefix interval) — a large
+    door-chord turn of Subproblem 2 can occur exactly at the first escape from layer 2, and
+    that card must be counted in the 9-card prefix. -/
 def CrossCardsLe (p : Plan) (t₁ t₂ : ℝ) : ℕ :=
   (p.steps.filter (fun st => t₁ ≤ st.2 ∧ st.2 ≤ t₂)).length
 
-/-- 区间卡数(左开右闭): (t₁, t₂] 内的转向卡数。
-    v4.5 修订: 公理 B 改用本定义 —— 逐层段右端 = 首次逃出时刻, 该时刻的卡
-    (含弦上转向) 归入本层段, 与闭前缀 [0, t₀] 拼合无重叠、无遗漏。 -/
+/-- Interval card count (left-open–right-closed): the number of steering cards in (t₁, t₂].
+    v4.5 revision: Axiom B now uses this definition — the right endpoint of a per-layer segment
+    is a first-escape time, and the card at that time (including a chord turn) belongs to that
+    layer segment, so it joins the closed prefix [0, t₀] with no overlap and no gap. -/
 def CrossCardsOC (p : Plan) (t₁ t₂ : ℝ) : ℕ :=
   (p.steps.filter (fun st => t₁ < st.2 ∧ st.2 ≤ t₂)).length
 ```
@@ -465,55 +476,68 @@ def CrossCardsOC (p : Plan) (t₁ t₂ : ℝ) : ℕ :=
 
 ```lean
 /-
-组合层公理 —— 恰 5 条 (设计文档 `Q2_lean_baseline_plan.md` v4.4 第 2 节; 签名逐字照抄, 不增删)。
-其中公理 A 为前缀形式(v4.5 修订: 闭区间): `base_nine` 断言第 2 层首次逃出时刻 t 及之前的闭区间 [0, t] 卡数 ≥ 9。
+Combinatorial-layer axioms — exactly 5 (design document `Q2_lean_baseline_plan.md` v4.4 §2;
+signatures copied verbatim, nothing added or removed). Axiom A is in prefix form (v4.5 revision:
+closed interval): `base_nine` asserts that the number of cards in the closed interval [0, t]
+up to and including the first escape from layer 2 at time t is ≥ 9.
 
-五条公理 A–E 均为栅栏几何的古典事实, 同源同地位: 显式声明、不在 Lean 内证明。
-docstring 指向 report.tex / Q2_global_reduction_draft.md 的精确位置; 不引用任何第三问文件。
+The five axioms A–E are classical facts of fence geometry, of the same provenance and the same
+status: declared explicitly, not proved in Lean. The docstrings point to the precise locations
+in report.tex / Q2_global_reduction_draft.md; no Subproblem 3 file is referenced.
 -/
 import Q2Formal.Model
 
-/-- 公理 A = 第一问 (report.tex Theorem 1, 第 341–343 行; 下界论证第 369–391 行:
-    净转角 ⌈30.85°/5°⌉ + ⌈8.32°/5°⌉ = 7 + 2 = 9)。
-    前缀局部化形式(v4.5 修订: 闭区间): 第 2 层首次逃出时刻 t 及之前的卡数 ≥ 9。
-    古典真值: 第一次转向 (≥30.85°, 7 卡) 严格先于 t; "走廊→出射"的第二次转向 (≥2β, 2 卡)
-    必发生在 ≤ t 时刻 —— 直线穿行时严格 < t, 恰在门缝弦上转向时 = t。v4.4 的半开形式
-    在 "弦上大转角转向" 路径下为假 (合法反例: 走廊下降线直抵门缝弦 s* = 9.13 处一次
-    转向 34.2° 穿出, 该卡恰在 t 生效, 半开前缀仅 7 卡 < 9), 故 v4.5 改为闭区间
-    CrossCardsLe, 恰在 t 生效的卡计入前缀。 -/
+/-- Axiom A = Subproblem 1 (report.tex Theorem 1, lines 341–343; lower-bound argument lines
+    369–391: net turn ⌈30.85°/5°⌉ + ⌈8.32°/5°⌉ = 7 + 2 = 9).
+    Prefix-localised form (v4.5 revision: closed interval): the number of cards up to and
+    including the first escape from layer 2 at time t is ≥ 9.
+    Classical truth: the first turn (≥30.85°, 7 cards) is strictly before t; the second turn
+    "corridor→exit" (≥2β, 2 cards) necessarily occurs at a time ≤ t — strictly < t when flying
+    straight through, and = t when turning exactly on the door chord. The v4.4 half-open form
+    is false on the "large door-chord turn" path (a legal counterexample: the corridor descent
+    line reaches the door chord at s* = 9.13, executes a single 34.2° turn and exits; that card
+    takes effect exactly at t, so the half-open prefix has only 7 cards < 9), hence v4.5 changes
+    to the closed interval CrossCardsLe, so the card effective exactly at t is counted in the
+    prefix. -/
 axiom base_nine : ∀ (p : Plan) (t : ℝ), Valid 2 p → FirstEscape p 2 t → CrossCardsLe p 0 t ≥ 9
 
-/-- 公理 B = 逐层穿越 ≥ 4 卡 (v4.2: 按 FirstEscape 首次时刻陈述, 显式参数版;
-    v4.5 修订: 区间由半开 [t₁, t₂) 改为左开右闭 (t₁, t₂] —— 段右端 t₂ = 首次逃出
-    第 k+1 层的时刻, 该时刻的卡 (含弦上转向) 归入本层段; 每层 4β 转向 (下降+回升,
-    或弦上大转角) 全部落在 (t₁, t₂] 内; 与闭前缀 [0, t₀] 拼合无重叠、无遗漏。
-    古典背书: report.tex 第 459–470 行门到门 4β + 草稿 v0.3 第 3 节绕行 ≥4β)。 -/
+/-- Axiom B = crossing each layer costs ≥ 4 cards (v4.2: stated in terms of the first time
+    FirstEscape, explicit-parameter version; v4.5 revision: the interval changed from half-open
+    [t₁, t₂) to left-open–right-closed (t₁, t₂] — the segment's right endpoint t₂ = the first
+    escape from layer k+1, and the card at that time (including a chord turn) belongs to this
+    layer segment; each layer's 4β turn (dive + rise, or a large door-chord turn) lies entirely
+    inside (t₁, t₂]; it joins the closed prefix [0, t₀] with no overlap and no gap.
+    Classical backing: report.tex lines 459–470 door-to-door 4β + draft v0.3 §3 detour ≥4β). -/
 axiom layer_four : ∀ (p : Plan) (k : ℕ) (t₁ t₂ : ℝ), 2 ≤ k → Valid (k+1) p →
-                    FirstEscape p k t₁ → FirstEscape p (k+1) t₂ →
-                    CrossCardsOC p t₁ t₂ ≥ 4
+                     FirstEscape p k t₁ → FirstEscape p (k+1) t₂ →
+                     CrossCardsOC p t₁ t₂ ≥ 4
 
-/-- 公理 C = 栅栏嵌套 (不透明谓词 Escaped 的古典事实; README 第 6.2 条绑定)。 -/
+/-- Axiom C = fence nesting (a classical fact of the opaque predicate Escaped; README item 6.2
+    binding). -/
 axiom escape_nested : ∀ (p : Plan) (k : ℕ) (t : ℝ),
-                       Escaped p (k+1) t → Escaped p k t
+                        Escaped p (k+1) t → Escaped p k t
 
-/-- 公理 D = 古典事实 F1 (v4.3 由 README 事实升级为公理; 栅栏几何, 与 C 同源):
-    首次穿越时刻存在 (折线 + 闭栅栏)。 -/
+/-- Axiom D = classical fact F1 (v4.3 promoted from a README fact to an axiom; fence geometry,
+    of the same provenance as C): a first crossing time exists (polyline + closed fence). -/
 axiom first_exists : ∀ (p : Plan) (k : ℕ), (∃ t, Escaped p k t) →
-                      (∃ t, FirstEscape p k t)
+                       (∃ t, FirstEscape p k t)
 
-/-- 公理 E = 古典事实 F2 (同源): 外栅栏首次逃出严格晚于内栅栏 (连续性)。 -/
+/-- Axiom E = classical fact F2 (same provenance): the first escape from an outer fence is
+    strictly later than that from an inner fence (continuity). -/
 axiom first_order : ∀ (p : Plan) (k : ℕ) (t₁ t₂ : ℝ),
-                     FirstEscape p (k+1) t₂ → FirstEscape p k t₁ → t₁ < t₂
+                      FirstEscape p (k+1) t₂ → FirstEscape p k t₁ → t₁ < t₂
 ```
 
 ### `Q2Formal/Counting.lean`
 
 ```lean
 /-
-记账引理 (设计文档 `Q2_lean_baseline_plan.md` v4.4 第 4.1 节; 全证, 无占位)。
-  注意: 设计终版 v4.5 的公理 A 为闭区间前缀形式 (`CrossCardsLe`)、公理 B 为左开右闭
-  逐层段 (`CrossCardsOC`), 本文件引理与之配套 (半开 `CrossCards` 引理保留备用)。
-  ceil 单调 / 次可加; 卡数 ≥ Σ⌈段转角/5°⌉; 区间可加 (半开/左开右闭); Valid n → Valid k。
+Bookkeeping lemmas (design document `Q2_lean_baseline_plan.md` v4.4 §4.1; fully proved, no
+placeholders). Note: in the final design version v4.5, Axiom A is the closed-prefix form
+(`CrossCardsLe`) and Axiom B is the left-open–right-closed per-layer segment (`CrossCardsOC`),
+and this file's lemmas are matched to them (the half-open `CrossCards` lemmas are kept for
+reference). ceil monotone / sub-additive; card count ≥ Σ⌈segment turn/5°⌉; interval additivity
+(half-open / left-open–right-closed); Valid n → Valid k.
 -/
 import Q2Formal.Model
 
@@ -521,20 +545,20 @@ noncomputable section
 
 open scoped Classical
 
-/-- 上取整 ceil : ℝ → ℕ (自证版: 存在性 = 阿基米德性 `exists_nat_ge`,
-    最小性 = `Nat.find`)。 -/
+/-- Ceiling ceil : ℝ → ℕ (self-contained version: existence = the Archimedean property
+    `exists_nat_ge`, minimality = `Nat.find`). -/
 def ceilNat (x : ℝ) : ℕ := Nat.find (exists_nat_ge x)
 
-/-- ceil 主性质: x ≤ ceilNat x -/
+/-- Main property of ceil: x ≤ ceilNat x -/
 theorem ceilNat_spec (x : ℝ) : x ≤ (ceilNat x : ℝ) :=
   Nat.find_spec (exists_nat_ge x)
 
-/-- ceil 单调 -/
+/-- ceil is monotone -/
 theorem ceilNat_mono {x y : ℝ} (h : x ≤ y) : ceilNat x ≤ ceilNat y := by
   apply Nat.find_min'
   exact le_trans h (ceilNat_spec y)
 
-/-- ceil 次可加 -/
+/-- ceil is sub-additive -/
 theorem ceilNat_add_le (x y : ℝ) : ceilNat (x + y) ≤ ceilNat x + ceilNat y := by
   apply Nat.find_min'
   have hx : x ≤ (ceilNat x : ℝ) := ceilNat_spec x
@@ -543,20 +567,21 @@ theorem ceilNat_add_le (x y : ℝ) : ceilNat (x + y) ≤ ceilNat x + ceilNat y :
     x + y ≤ (ceilNat x : ℝ) + (ceilNat y : ℝ) := add_le_add hx hy
     _ = ((ceilNat x + ceilNat y : ℕ) : ℝ) := by rw [Nat.cast_add]
 
-/-- 5° (弧度) -/
+/-- 5° (in radians) -/
 def deg5 : ℝ := (5 : ℝ) / 180 * Real.pi
 
 theorem deg5_pos : 0 < deg5 := by
   unfold deg5
   positivity
 
-/-- 每张卡至多 5° 时, 单卡对 Σ⌈|θ|/5°⌉ 的贡献 ≤ 1 -/
+/-- When each card is at most 5°, a single card contributes ≤ 1 to Σ⌈|θ|/5°⌉ -/
 theorem ceil_turn_le_one {θ : ℝ} (h : |θ| ≤ deg5) : ceilNat (|θ| / deg5) ≤ 1 := by
   apply Nat.find_min'
   rw [div_le_iff₀ deg5_pos]
   simpa using h
 
-/-- List 版记账: 若每项 f a ≤ 1, 则 (l.map f).sum ≤ l.length -/
+/-- List version of the bookkeeping: if every item satisfies f a ≤ 1, then
+    (l.map f).sum ≤ l.length -/
 theorem List_sum_le_length {α : Type u} (f : α → ℕ) (l : List α) (h : ∀ a ∈ l, f a ≤ 1) :
     (l.map f).sum ≤ l.length := by
   induction l with
@@ -568,7 +593,7 @@ theorem List_sum_le_length {α : Type u} (f : α → ℕ) (l : List α) (h : ∀
       simp
       omega
 
-/-- 记账: 卡数 ≥ Σ⌈段转角/5°⌉ (每张卡 ≤ 5° 时) -/
+/-- Bookkeeping: card count ≥ Σ⌈segment turn/5°⌉ (when each card is ≤ 5°) -/
 theorem cards_ge_sum_ceil_turns (p : Plan) (hsmall : ∀ st ∈ p.steps, |st.1| ≤ deg5) :
     p.cards ≥ (p.steps.map (fun st => ceilNat (|st.1| / deg5))).sum := by
   have h : ∀ st ∈ p.steps, ceilNat (|st.1| / deg5) ≤ 1 :=
@@ -576,13 +601,14 @@ theorem cards_ge_sum_ceil_turns (p : Plan) (hsmall : ∀ st ∈ p.steps, |st.1| 
   simpa [Plan.cards] using
     (List_sum_le_length (fun st => ceilNat (|st.1| / deg5)) p.steps h)
 
-/-- Valid 单调: Valid n → Valid k (k ≤ n) -/
+/-- Valid is monotone: Valid n → Valid k (k ≤ n) -/
 theorem valid_mono {n k : ℕ} {p : Plan} (h : k ≤ n) (hv : Valid n p) : Valid k p := by
   intro j hj1 hjk t c hc
   exact hv j hj1 (le_trans hjk h) t c hc
 
-/-- CrossCards 半开区间可加: [t₁,t₂) ⊎ [t₂,t₃) = [t₁,t₃) (需 t₁ ≤ t₂ ≤ t₃;
-    端点归属由定义直接给出; 对卡表逐项分类证明) -/
+/-- CrossCards is additive over half-open intervals: [t₁,t₂) ⊎ [t₂,t₃) = [t₁,t₃) (requires
+    t₁ ≤ t₂ ≤ t₃; endpoint membership is given directly by the definition; proved by
+    case-splitting item by item over the card list) -/
 theorem crossCards_add (p : Plan) (t₁ t₂ t₃ : ℝ) (ht₁ : t₁ ≤ t₂) (ht₂ : t₂ ≤ t₃) :
     CrossCards p t₁ t₂ + CrossCards p t₂ t₃ = CrossCards p t₁ t₃ := by
   unfold CrossCards
@@ -608,12 +634,13 @@ theorem crossCards_add (p : Plan) (t₁ t₂ t₃ : ℝ) (ht₁ : t₁ ≤ t₂)
           simp [h1, h2, h3] at ih ⊢
           omega
 
-/-- 嵌套 ⟹ 可加: 相邻首次逃出时刻给出两段互不重叠的半开区间之和 -/
+/-- Nesting ⟹ additivity: adjacent first-escape times give the sum of two non-overlapping
+    half-open intervals -/
 theorem crossCards_disjoint_add (p : Plan) (t₁ t₂ t₃ : ℝ) (h₁ : t₁ ≤ t₂) (h₂ : t₂ ≤ t₃) :
     CrossCards p t₁ t₂ + CrossCards p t₂ t₃ = CrossCards p t₁ t₃ :=
   crossCards_add p t₁ t₂ t₃ h₁ h₂
 
-/-- CrossCards ≤ 总卡数 -/
+/-- CrossCards ≤ total card count -/
 theorem crossCards_le_cards (p : Plan) (t₁ t₂ : ℝ) : CrossCards p t₁ t₂ ≤ p.cards := by
   unfold CrossCards Plan.cards
   induction p.steps with
@@ -621,7 +648,8 @@ theorem crossCards_le_cards (p : Plan) (t₁ t₂ : ℝ) : CrossCards p t₁ t�
   | cons st t ih =>
       by_cases h : t₁ ≤ st.2 ∧ st.2 < t₂ <;> simp [h] at ih ⊢ <;> omega
 
-/-- 两个互不重叠半开区间上的卡数之和 ≤ 总卡数 (各层区间加总用) -/
+/-- The sum of card counts over two non-overlapping half-open intervals ≤ total card count
+    (used for summing the per-layer intervals) -/
 theorem crossCards_pair_le (p : Plan) (t₁ t₂ t₃ : ℝ) :
     CrossCards p t₁ t₂ + CrossCards p t₂ t₃ ≤ p.cards := by
   unfold CrossCards Plan.cards
@@ -640,8 +668,10 @@ theorem crossCards_pair_le (p : Plan) (t₁ t₂ t₃ : ℝ) :
         · simp [h1, h2] at ih ⊢
           omega
 
-/-- CrossCardsOC 左开右闭区间可加: (t₁,t₂] ⊎ (t₂,t₃] = (t₁,t₃] (需 t₁ ≤ t₂ ≤ t₃;
-    v4.5 修订: 逐层段左开右闭, 端点归属由定义直接给出; 对卡表逐项分类证明) -/
+/-- CrossCardsOC is additive over left-open–right-closed intervals:
+    (t₁,t₂] ⊎ (t₂,t₃] = (t₁,t₃] (requires t₁ ≤ t₂ ≤ t₃; v4.5 revision: per-layer segments are
+    left-open–right-closed, endpoint membership is given directly by the definition; proved by
+    case-splitting item by item over the card list) -/
 theorem crossCardsOC_add (p : Plan) (t₁ t₂ t₃ : ℝ) (ht₁ : t₁ ≤ t₂) (ht₂ : t₂ ≤ t₃) :
     CrossCardsOC p t₁ t₂ + CrossCardsOC p t₂ t₃ = CrossCardsOC p t₁ t₃ := by
   unfold CrossCardsOC
@@ -667,8 +697,10 @@ theorem crossCardsOC_add (p : Plan) (t₁ t₂ t₃ : ℝ) (ht₁ : t₁ ≤ t�
           simp [h1, h2, h3] at ih ⊢
           omega
 
-/-- 闭前缀 [0, t] 与左开右闭链 (t, t'] 无重叠, 卡数和 ≤ 总卡数 (v4.5 修订:
-    公理 A 闭前缀 + 公理 B 左开右闭逐层段的合成引理; τ ≤ t 与 t < τ 互斥) -/
+/-- The closed prefix [0, t] and the left-open–right-closed chain (t, t'] do not overlap, and
+    their card counts sum to ≤ total card count (v4.5 revision: the composition lemma for
+    Axiom A's closed prefix + Axiom B's left-open–right-closed per-layer segments; τ ≤ t and
+    t < τ are mutually exclusive) -/
 theorem crossCardsLe_oc_pair_le (p : Plan) (t t' : ℝ) :
     CrossCardsLe p 0 t + CrossCardsOC p t t' ≤ p.cards := by
   unfold CrossCardsLe CrossCardsOC Plan.cards
@@ -692,10 +724,12 @@ theorem crossCardsLe_oc_pair_le (p : Plan) (t t' : ℝ) :
 
 ```lean
 /-
-目标定理 + 强归纳 (设计文档 `Q2_lean_baseline_plan.md` v4.4 第 3–4 节; 全证, 无占位)。
+Target theorem + strong induction (design document `Q2_lean_baseline_plan.md` v4.4 §3–4;
+fully proved, no placeholders).
 
-证明骨架: 基例 = 公理 A(闭区间前缀形式 `base_nine`, v4.5 修订);
-归纳步 = 公理 B + D/E + 左开右闭区间可加, 合成 9 + 4(n−2) = 4n+1。
+Proof skeleton: base case = Axiom A (closed-interval prefix form `base_nine`, v4.5 revision);
+induction step = Axiom B + D/E + left-open–right-closed interval additivity, composed into
+9 + 4(n−2) = 4n+1.
 -/
 import Q2Formal.Axioms
 import Q2Formal.Counting
@@ -704,7 +738,7 @@ noncomputable section
 
 open Classical
 
-/-- Escaped 向下嵌套: 由公理 C 迭代 (n 降到 k)。 -/
+/-- Escaped nests downward: obtained by iterating Axiom C (n down to k). -/
 lemma escaped_down (p : Plan) (t : ℝ) :
     ∀ {k n : ℕ}, k ≤ n → Escaped p n t → Escaped p k t := by
   intro k n hkn hn
@@ -722,7 +756,8 @@ lemma escaped_down (p : Plan) (t : ℝ) :
         exact escape_nested p (n - 1) t hnn
       exact ih (n - 1) (by omega) hk' hn'
 
-/-- 首次逃出链: t₂ < t₃ < ... < t_n, 每层 FirstEscape (由公理 D/E 构造, 强归纳)。 -/
+/-- First-escape chain: t₂ < t₃ < ... < t_n, a FirstEscape for each layer (constructed from
+    Axioms D/E, strong induction). -/
 lemma firstEscape_chain (p : Plan) : ∀ {n : ℕ}, 2 ≤ n → (∃ t, Escaped p n t) →
     ∃ ts : List ℝ, ts.length = n - 1 ∧
       (∀ k : ℕ, 2 ≤ k → k ≤ n → ∀ hk : k - 2 < ts.length,
@@ -795,17 +830,18 @@ lemma firstEscape_chain (p : Plan) : ∀ {n : ℕ}, 2 ≤ n → (∃ t, Escaped 
           rw [h1, h2]
           exact hord' k hk2 (by omega) (by omega) (by omega)
 
-/-- CrossCards 自交为空: [t, t) 无卡。 -/
+/-- CrossCards is empty on a self-intersection: [t, t) contains no card. -/
 lemma crossCards_self (p : Plan) (t : ℝ) : CrossCards p t t = 0 := by
   have h := crossCards_add p t t t (le_rfl) (le_rfl)
   omega
 
-/-- CrossCardsOC 自交为空: (t, t] 无卡 (v4.5: 链望远镜 m=0 情形用)。 -/
+/-- CrossCardsOC is empty on a self-intersection: (t, t] contains no card (v4.5: used for the
+    m=0 case of the chain telescope). -/
 lemma crossCardsOC_self (p : Plan) (t : ℝ) : CrossCardsOC p t t = 0 := by
   have h := crossCardsOC_add p t t t (le_rfl) (le_rfl)
   omega
 
-/-- t ≤ 0 时 [0, t) 无卡。 -/
+/-- When t ≤ 0, [0, t) contains no card. -/
 lemma crossCards_right_nonpos (p : Plan) {t : ℝ} (ht : t ≤ 0) : CrossCards p 0 t = 0 := by
   unfold CrossCards
   rw [List.length_eq_zero_iff, List.filter_eq_nil_iff]
@@ -815,9 +851,10 @@ lemma crossCards_right_nonpos (p : Plan) {t : ℝ} (ht : t ≤ 0) : CrossCards p
   have : st.2 < 0 := lt_of_lt_of_le hd.2 ht
   exact (not_lt_of_ge hd.1) this
 
-/-- 相邻首出时刻对的卡数和: 沿链 t₀ t₁ ... tₘ 累加 CrossCardsOC(tᵢ, tᵢ₊₁]
-    (v4.5: 左开右闭, 段右端首逃时刻的卡归本段)。用结构递归取代 range 索引,
-    避免 getElem 界证明。 -/
+/-- Sum of card counts over adjacent first-escape time pairs: accumulate CrossCardsOC(tᵢ, tᵢ₊₁]
+    along the chain t₀ t₁ ... tₘ (v4.5: left-open–right-closed, the card at the segment's right
+    endpoint — a first-escape time — belongs to that segment). Uses structural recursion instead
+    of range indexing, to avoid getElem bound proofs. -/
 def ccChain (p : Plan) : List ℝ → ℕ
   | [] => 0
   | [_] => 0
@@ -826,7 +863,8 @@ def ccChain (p : Plan) : List ℝ → ℕ
 theorem ccChain_cons (p : Plan) (t₀ t₁ : ℝ) (rest : List ℝ) :
     ccChain p (t₀ :: t₁ :: rest) = CrossCardsOC p t₀ t₁ + ccChain p (t₁ :: rest) := rfl
 
-/-- 严格递增链的传递: i < j ≤ m 时 ts[i] < ts[j] (对 j - (i+1) 归纳)。 -/
+/-- Transitivity of a strictly increasing chain: ts[i] < ts[j] when i < j ≤ m (induction on
+    j - (i+1)). -/
 lemma chain_lt_between {m : ℕ} {ts : List ℝ}
     (hord : ∀ k : ℕ, 0 ≤ k → k + 1 < m + 1 → ∀ hk : k < ts.length, ∀ hk' : k + 1 < ts.length,
         ts[k]'hk < ts[k + 1]'hk') :
@@ -847,7 +885,8 @@ lemma chain_lt_between {m : ℕ} {ts : List ℝ}
         · omega
       exact lt_trans h1 h2
 
-/-- 望远镜: 相邻左开右闭区间卡数和 = 首尾区间 (逐对 crossCardsOC_add)。 -/
+/-- Telescope: the sum of card counts over adjacent left-open–right-closed intervals equals the
+    first-to-last interval (pairwise crossCardsOC_add). -/
 lemma ccChain_telescope (p : Plan) : ∀ (m : ℕ) (ts : List ℝ), ts.length = m + 1 →
     (∀ k : ℕ, 0 ≤ k → k + 1 < m + 1 → ∀ hk : k < ts.length, ∀ hk' : k + 1 < ts.length,
         ts[k]'hk < ts[k + 1]'hk') →
@@ -911,7 +950,8 @@ lemma ccChain_telescope (p : Plan) : ∀ (m : ℕ) (ts : List ℝ), ts.length = 
                 · exact ht₀t₁
                 · exact ht₁t₃
 
-/-- 逐层 ≥ 4 卡: 公理 B 沿链累加 (层号 k 随链下移而 +1)。 -/
+/-- ≥ 4 cards per layer: Axiom B accumulated along the chain (the layer index k increases by 1
+    as the chain advances). -/
 lemma ccChain_ge_four (p : Plan) (n k : ℕ) (hv : Valid n p) :
     ∀ (m : ℕ) (ts : List ℝ), ts.length = m + 1 →
     (∀ j : ℕ, 0 ≤ j → j + 1 ≤ m + 1 → ∀ hj : j < ts.length,
@@ -962,7 +1002,7 @@ lemma ccChain_ge_four (p : Plan) (n k : ℕ) (hv : Valid n p) :
         rw [ccChain_cons]
         exact le_trans (by omega : 4 * m ≤ 4 + 4 * (m - 1)) (add_le_add hCC hih)
 
-/-- 目标定理 (设计文档第 3 节, 逐字):
+/-- Target theorem (design document §3, verbatim):
     N_lower_bound (n : ℕ) (hn : 2 ≤ n) :
       ∀ p : Plan, Valid n p → (∃ t, Escaped p n t) → p.cards ≥ 4 * n + 1 -/
 theorem N_lower_bound (n : ℕ) (hn : 2 ≤ n) :
@@ -981,20 +1021,20 @@ theorem N_lower_bound (n : ℕ) (hn : 2 ≤ n) :
     intro k hk0 hk hkA hkB
     have hordk := hord (k + 2) (by omega) (by omega) (by omega) (by omega)
     simpa only [show (k + 2) - 2 = k from by omega, show (k + 2) - 1 = k + 1 from by omega] using hordk
-  -- 基例: 前 9 卡 (公理 A, v4.5 闭前缀)
+  -- Base case: the first 9 cards (Axiom A, v4.5 closed prefix)
   have hbase : CrossCardsLe p 0 (ts[0]'(by omega)) ≥ 9 :=
     base_nine p (ts[0]'(by omega)) (valid_mono (show 2 ≤ n from hn) hv)
       (hFE0 0 (by omega) (by omega) (by omega))
-  -- 逐层 ≥ 4 卡 (公理 B)
+  -- ≥ 4 cards per layer (Axiom B)
   have hlayers : 4 * m ≤ ccChain p ts :=
     ccChain_ge_four p n 2 hv m ts hm_len hFE0 (by omega) (by omega)
-  -- 望远镜 + 左开右闭区间可加
+  -- Telescope + left-open–right-closed interval additivity
   have htel : ccChain p ts = CrossCardsOC p (ts[0]'(by omega)) (ts[m]'(by omega)) :=
     ccChain_telescope p m ts hm_len hord0 (by omega) (by omega)
   have htotal : CrossCardsLe p 0 (ts[0]'(by omega)) + ccChain p ts ≤ p.cards := by
     rw [htel]
     exact crossCardsLe_oc_pair_le p (ts[0]'(by omega)) (ts[m]'(by omega))
-  -- 合成 9 + 4(n−2) = 4n + 1
+  -- Compose 9 + 4(n−2) = 4n + 1
   have hsum : 9 + 4 * m ≤ p.cards := le_trans (add_le_add hbase hlayers) htotal
   dsimp [m] at hsum ⊢
   omega
