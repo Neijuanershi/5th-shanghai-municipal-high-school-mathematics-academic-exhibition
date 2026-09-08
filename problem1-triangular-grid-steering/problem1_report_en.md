@@ -606,7 +606,7 @@ theorem valid_mono {n k : ℕ} {p : Plan} (h : k ≤ n) (hv : Valid n p) : Valid
   intro j hj1 hjk t c hc
   exact hv j hj1 (le_trans hjk h) t c hc
 
-/-- CrossCards is additive over half-open intervals: [t₁,t₂) ⊎ [t₂,t₃) = [t₁,t₃) (requires
+/-- CrossCards is additive over half-open intervals: [t₁,t₂) + [t₂,t₃) = [t₁,t₃) (requires
     t₁ ≤ t₂ ≤ t₃; endpoint membership is given directly by the definition; proved by
     case-splitting item by item over the card list) -/
 theorem crossCards_add (p : Plan) (t₁ t₂ t₃ : ℝ) (ht₁ : t₁ ≤ t₂) (ht₂ : t₂ ≤ t₃) :
@@ -634,7 +634,7 @@ theorem crossCards_add (p : Plan) (t₁ t₂ t₃ : ℝ) (ht₁ : t₁ ≤ t₂)
           simp [h1, h2, h3] at ih ⊢
           omega
 
-/-- Nesting ⟹ additivity: adjacent first-escape times give the sum of two non-overlapping
+/-- Nesting implies additivity: adjacent first-escape times give the sum of two non-overlapping
     half-open intervals -/
 theorem crossCards_disjoint_add (p : Plan) (t₁ t₂ t₃ : ℝ) (h₁ : t₁ ≤ t₂) (h₂ : t₂ ≤ t₃) :
     CrossCards p t₁ t₂ + CrossCards p t₂ t₃ = CrossCards p t₁ t₃ :=
@@ -669,7 +669,7 @@ theorem crossCards_pair_le (p : Plan) (t₁ t₂ t₃ : ℝ) :
           omega
 
 /-- CrossCardsOC is additive over left-open–right-closed intervals:
-    (t₁,t₂] ⊎ (t₂,t₃] = (t₁,t₃] (requires t₁ ≤ t₂ ≤ t₃; v4.5 revision: per-layer segments are
+    (t₁,t₂] + (t₂,t₃] = (t₁,t₃] (requires t₁ ≤ t₂ ≤ t₃; v4.5 revision: per-layer segments are
     left-open–right-closed, endpoint membership is given directly by the definition; proved by
     case-splitting item by item over the card list) -/
 theorem crossCardsOC_add (p : Plan) (t₁ t₂ t₃ : ℝ) (ht₁ : t₁ ≤ t₂) (ht₂ : t₂ ≤ t₃) :
